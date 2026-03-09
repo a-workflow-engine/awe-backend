@@ -37,7 +37,7 @@ workflowRouter.patch(
 workflowRouter.post(
   "/:workflowId/versions",
   authenticateRequest,
-  workflowVersionController.createVersion,
+  workflowVersionController.create,
 );
 
 workflowRouter.get(
@@ -51,7 +51,8 @@ workflowRouter.post(
   workflowVersionController.validateVersion,
 );
 
-workflowRouter.post(
-  "/:workflowId/versions/:versionNumber/publish",
-  workflowVersionController.publishVersion,
+workflowRouter.patch(
+  "/:workflowId/versions/:version/status",
+  authenticateRequest,
+  workflowVersionController.updateStatus,
 );

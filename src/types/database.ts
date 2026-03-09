@@ -743,6 +743,7 @@ export interface WorkflowVersion {
   is_deleted: Generated<boolean>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
+  published_on: Timestamp | null;
   status: WorkflowVersionStatus;
   version: Generated<number>;
   workflow_id: string;

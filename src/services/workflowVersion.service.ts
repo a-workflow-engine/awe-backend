@@ -5,10 +5,17 @@ import type { ActorModel, WorkflowVersionModel } from "../types/models.js";
 import type { Node, Edge } from "../types/workflow.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
-import { WorkflowVersionDetailRequest } from "../schemas/workflowVersion.schema.js";
+import {
+  WorkflowVersionDetailRequest,
+  WorkflowVersionUpdateStatusRequest,
+} from "../schemas/workflowVersion.schema.js";
 import { z } from "zod";
+import { StateTransitionError } from "../errors/StateTransitionError.js";
 
 type DetailInput = z.infer<typeof WorkflowVersionDetailRequest>;
+type StatusPartialUpdateInput = z.infer<
+  typeof WorkflowVersionUpdateStatusRequest
+>;
 
 export type CreateVersionInput = {
   workflowId: string;
@@ -60,6 +67,57 @@ export const workflowVersionService = {
       );
 
       await edgeService.createMany(data.edges, nodes, actor, transaction);
+
+      return workflowVersion;
+    });
+  },
+
+  changeStatus: async (data: StatusPartialUpdateInput) => {
+    return db.transaction().execute(async (transaction) => {
+      let workflowVersion =
+        await workflowVersionRepository.findByWorkflowIdAndVersion(
+          data.workflowId,
+          data.version,
+          transaction,
+        );
+
+      const currentStatus = workflowVersion.status;
+      const newStatus = data.status;
+
+      if (currentStatus === WorkflowVersionStatuses.DRAFT) {
+        throw new StateTransitionError(
+          "Invalid workflow version state transition from DRAFT",
+        );
+      }
+
+      if (currentStatus === newStatus) {
+        return workflowVersion;
+      }
+
+      if (newStatus === WorkflowVersionStatuses.ACTIVE) {
+        await workflowVersionRepository.demoteActiveVersionToPublished(
+          data.workflowId,
+          transaction,
+        );
+      }
+
+      const updatePayload: Partial<typeof workflowVersion> = {
+        status: newStatus,
+      };
+
+      if (
+        !workflowVersion.published_on &&
+        (newStatus === WorkflowVersionStatuses.PUBLISHED ||
+          newStatus === WorkflowVersionStatuses.ACTIVE)
+      ) {
+        updatePayload.published_on = new Date();
+      }
+
+      workflowVersion = await workflowVersionRepository.updateById(
+        workflowVersion.id,
+        updatePayload,
+        transaction,
+      );
 
       return workflowVersion;
     });

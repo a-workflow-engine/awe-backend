@@ -1,9 +1,12 @@
 import type { Request, Response } from "express";
 import { workflowVersionService } from "../services/workflowVersion.service.js";
-import { WorkflowVersionDetailRequest } from "../schemas/workflowVersion.schema.js";
+import {
+  WorkflowVersionDetailRequest,
+  WorkflowVersionUpdateStatusRequest,
+} from "../schemas/workflowVersion.schema.js";
 
 export const workflowVersionController = {
-  createVersion: async (req: Request, res: Response) => {
+  create: async (req: Request, res: Response) => {
     const workflowVersion = await workflowVersionService.createNew(
       { ...req.body, workflowId: req.params.workflowId },
       req.actor,
@@ -33,7 +36,8 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    const {workflowVersion, nodes, edges} = await workflowVersionService.getDetail(data);
+    const { workflowVersion, nodes, edges } =
+      await workflowVersionService.getDetail(data);
 
     return res.status(200).json({
       id: workflowVersion.id,
@@ -48,14 +52,21 @@ export const workflowVersionController = {
     });
   },
 
-  publishVersion: (req: Request, res: Response) => {
+  updateStatus: async (req: Request, res: Response) => {
+    const data = WorkflowVersionUpdateStatusRequest.parse({
+      ...req.params,
+      ...req.body,
+      actor: req.actor,
+    });
+
+    const workflowVersion = await workflowVersionService.changeStatus(data);
+
     res.status(200).json({
-      message: "Version published and set as active.",
       version: {
-        id: "ver-uuid",
-        versionNumber: 2,
-        status: "active",
-        publishedAt: "2025-01-15T10:30:00.000Z",
+        id: workflowVersion.id,
+        versionNumber: workflowVersion.version,
+        status: workflowVersion.status,
+        publishedAt: workflowVersion.published_on,
       },
     });
   },
