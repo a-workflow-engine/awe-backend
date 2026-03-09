@@ -1,7 +1,9 @@
-import type { Transaction } from "kysely";
-import type { DB } from "../types/database.js";
+import { sql, type Insertable, type Transaction } from "kysely";
+import type { DB, WorkflowVersion } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
+
+export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 
 export const workflowVersionRepository = {
   findByWorkflowId: async (id: string, transaction?: Transaction<DB>) => {
@@ -14,6 +16,33 @@ export const workflowVersionRepository = {
         .execute();
     } catch (err) {
       throw new RepositoryError(`Workflow search for id=${id} failed`, err);
+    }
+  },
+
+  insertNextVersion: async (
+    data: NewWorkflowVersion,
+    transaction?: Transaction<DB>,
+  ) => {
+    try {
+      return await (transaction ?? db)
+        .insertInto("workflow_version")
+        .values({
+          ...data,
+          version: sql<number>`
+      coalesce(
+        (
+          select max(version) + 1
+          from workflow_version
+          where workflow_id = ${data.workflow_id}
+        ),
+        1
+      )
+    `,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    } catch (err) {
+      throw new RepositoryError("Insert workflow version failed", err);
     }
   },
 };

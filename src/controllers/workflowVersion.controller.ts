@@ -1,13 +1,19 @@
 import type { Request, Response } from "express";
+import { workflowVersionService } from "../services/workflowVersion.service.js";
 
 export const workflowVersionController = {
-  createVersion: (req: Request, res: Response) => {
-    res.status(201).json({
-      id: "ver-uuid",
-      workflowId: "wf-uuid",
-      versionNumber: 2,
-      status: "draft",
-      createdAt: "2025-01-15T11:00:00.000Z",
+  createVersion: async (req: Request, res: Response) => {
+    const workflowVersion = await workflowVersionService.createNew(
+      req.body,
+      req.actor,
+    );
+
+    return res.status(201).json({
+      id: workflowVersion.id,
+      workflowId: workflowVersion.workflow_id,
+      versionNumber: workflowVersion.version,
+      status: workflowVersion.status,
+      createdAt: workflowVersion.created_on,
     });
   },
 

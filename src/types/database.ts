@@ -49,7 +49,7 @@ export type JsonPrimitive = boolean | number | string | null;
 
 export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
 
-export type NodeType = "decision" | "end" | "script" | "service" | "user";
+export type NodeType = "decision" | "end" | "script" | "service" | "start" | "user";
 
 export type Numeric = ColumnType<string, number | string, number | string>;
 
@@ -387,18 +387,19 @@ export interface AuthUsers {
 }
 
 export interface Edge {
+  client_id: string;
   condition_expression: string | null;
   created_by: string;
   created_on: Generated<Timestamp>;
   deleted_by: string | null;
   deleted_on: Timestamp | null;
-  destination_node_id: string;
+  destination_node_id: string | null;
   id: Generated<string>;
   is_deleted: Generated<boolean>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
   name: string | null;
-  source_node_id: string;
+  source_node_id: string | null;
 }
 
 export interface Environment {
@@ -491,6 +492,7 @@ export interface InstanceTransitionLog {
 }
 
 export interface Node {
+  client_id: string;
   configuration: Json | null;
   created_by: string;
   created_on: Generated<Timestamp>;
@@ -503,7 +505,7 @@ export interface Node {
   max_attempts: Generated<number>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
-  name: string;
+  name: string | null;
   output_schema: Json | null;
   type: NodeType;
   workflow_version_id: string;
@@ -738,14 +740,11 @@ export interface WorkflowVersion {
   deleted_on: Timestamp | null;
   description: string | null;
   id: Generated<string>;
-  input_schema: Json | null;
   is_deleted: Generated<boolean>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
-  start_node_x_coordinate: number | null;
-  start_node_y_coordinate: number | null;
   status: WorkflowVersionStatus;
-  version: number;
+  version: Generated<number>;
   workflow_id: string;
 }
 

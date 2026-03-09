@@ -116,16 +116,6 @@ export const workflowRepository = {
           .as("workflow_version_description"),
         eb.ref("workflow_version.status").as("workflow_version_status"),
 
-        eb
-          .ref("workflow_version.input_schema")
-          .as("workflow_version_input_schema"),
-        eb
-          .ref("workflow_version.start_node_x_coordinate")
-          .as("workflow_version_start_node_x_coordinate"),
-        eb
-          .ref("workflow_version.start_node_y_coordinate")
-          .as("workflow_version_start_node_y_coordinate"),
-
         eb.ref("workflow_version.created_on").as("workflow_version_created_on"),
         eb.ref("workflow_version.created_by").as("workflow_version_created_by"),
 
@@ -166,11 +156,6 @@ export const workflowRepository = {
               version: row.workflow_version_version!,
               description: row.workflow_version_description,
               status: row.workflow_version_status!,
-              input_schema: row.workflow_version_input_schema,
-              start_node_x_coordinate:
-                row.workflow_version_start_node_x_coordinate,
-              start_node_y_coordinate:
-                row.workflow_version_start_node_y_coordinate,
               created_on: row.workflow_version_created_on!,
               created_by: row.workflow_version_created_by!,
               modified_on: row.workflow_version_modified_on!,

@@ -36,6 +36,7 @@ workflowRouter.patch(
 
 workflowRouter.post(
   "/:workflowId/versions",
+  authenticateRequest,
   workflowVersionController.createVersion,
 );
 
