@@ -45,6 +45,7 @@ export const workflowGroupController = {
         return {
           id: workflow.id,
           name: workflow.name,
+          description: workflow.description,
           latestVersion: latestWorkflowVersion
             ? {
                 id: latestWorkflowVersion.id,

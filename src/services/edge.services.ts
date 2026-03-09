@@ -42,8 +42,11 @@ const getConditionExpressionForEdge = (
     return null;
   }
 
-  const decisionNode = JSON.parse(
-    sourceNode.configuration as string,
+  const sourceNodeConfig = sourceNode.configuration;
+  const decisionNode = (
+    typeof sourceNodeConfig === "string"
+      ? JSON.parse(sourceNodeConfig)
+      : sourceNodeConfig
   ) as DecisionNodeConfiguration;
 
   if (edge.ruleId === decisionNode.defaultRule.id) {

@@ -4,7 +4,7 @@ import { workflowVersionService } from "../services/workflowVersion.service.js";
 export const workflowVersionController = {
   createVersion: async (req: Request, res: Response) => {
     const workflowVersion = await workflowVersionService.createNew(
-      req.body,
+      {...req.body, workflowId: req.params.workflowId},
       req.actor,
     );
 
