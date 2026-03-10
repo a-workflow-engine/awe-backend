@@ -3,6 +3,7 @@ import { workflowVersionService } from "../services/workflowVersion.service.js";
 import {
   WorkflowVersionDetailRequest,
   WorkflowVersionUpdateStatusRequest,
+  WorkflowVersionValidateRequest,
 } from "../schemas/workflowVersion.schema.js";
 
 export const workflowVersionController = {
@@ -21,12 +22,21 @@ export const workflowVersionController = {
     });
   },
 
-  validateVersion: (req: Request, res: Response) => {
+  validate: async (req: Request, res: Response) => {
+    const data = WorkflowVersionValidateRequest.parse({
+      ...req.params,
+      actor: req.actor,
+    });
+
+    const { result, workflowVersion } =
+      await workflowVersionService.validate(data);
+
     res.status(200).json({
-      valid: true,
-      errors: [],
-      versionId: "ver-uuid",
-      versionNumber: 2,
+      valid: result.valid,
+      errors: result.errors,
+      versionId: workflowVersion.id,
+      versionNumber: workflowVersion.version,
+      status: workflowVersion.status,
     });
   },
 

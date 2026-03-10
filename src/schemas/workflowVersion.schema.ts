@@ -17,3 +17,9 @@ export const WorkflowVersionUpdateStatusRequest = z.object({
     WorkflowVersionStatuses.ACTIVE,
   ]),
 });
+
+export const WorkflowVersionValidateRequest = z.object({
+  workflowId: z.uuidv4(),
+  version: z.coerce.number().min(1),
+  actor: ActorSchema,
+});

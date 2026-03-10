@@ -8,14 +8,17 @@ import { nodeService } from "./node.services.js";
 import {
   WorkflowVersionDetailRequest,
   WorkflowVersionUpdateStatusRequest,
+  WorkflowVersionValidateRequest,
 } from "../schemas/workflowVersion.schema.js";
 import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
+import { validateWorkflow } from "../utils.js";
 
 type DetailInput = z.infer<typeof WorkflowVersionDetailRequest>;
 type StatusPartialUpdateInput = z.infer<
   typeof WorkflowVersionUpdateStatusRequest
 >;
+type ValidateInput = z.infer<typeof WorkflowVersionValidateRequest>;
 
 export type CreateVersionInput = {
   workflowId: string;
@@ -70,6 +73,28 @@ export const workflowVersionService = {
 
       return workflowVersion;
     });
+  },
+
+  validate: async (data: ValidateInput) => {
+    let workflowVersion =
+      await workflowVersionRepository.findByWorkflowIdAndVersion(
+        data.workflowId,
+        data.version,
+      );
+
+    const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
+    const edges = await edgeService.getByNodes(nodes);
+
+    const result = validateWorkflow(nodes, edges);
+
+    if (result.valid) {
+      workflowVersion = await workflowVersionRepository.updateById(
+        workflowVersion.id,
+        { status: WorkflowVersionStatuses.VALID },
+      );
+    }
+
+    return { result, workflowVersion };
   },
 
   changeStatus: async (data: StatusPartialUpdateInput) => {

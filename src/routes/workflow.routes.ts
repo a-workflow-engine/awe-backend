@@ -47,8 +47,9 @@ workflowRouter.get(
 );
 
 workflowRouter.post(
-  "/:workflowId/versions/:versionNumber/validate",
-  workflowVersionController.validateVersion,
+  "/:workflowId/versions/:version/validate",
+  authenticateRequest,
+  workflowVersionController.validate,
 );
 
 workflowRouter.patch(
