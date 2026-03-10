@@ -82,6 +82,9 @@ export const workflowVersionService = {
         data.version,
       );
 
+    if (workflowVersion.status !== WorkflowVersionStatuses.DRAFT) {
+      return { result: { valid: true, errors: [] }, workflowVersion };
+    }
     const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
     const edges = await edgeService.getByNodes(nodes);
 
