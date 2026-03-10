@@ -1,14 +1,14 @@
 import type { Request, Response } from "express";
 import { workflowService } from "../services/workflow.service.js";
 import {
-  WorkflowGroupInputSchema,
-  UpdateGroupInputSchema,
-  WorkflowIdInputSchema,
+  WorkflowGroupCreateSchema,
+  WorkflowGroupUpdateSchema,
+  WorkflowIdSchema,
 } from "../schemas/workflow.schema.js";
 
 export const workflowGroupController = {
   create: async (req: Request, res: Response) => {
-    const { name, description } = WorkflowGroupInputSchema.parse(req.body);
+    const { name, description } = WorkflowGroupCreateSchema.parse(req.body);
     const workflow = await workflowService.create(
       { name, description },
       req.actor
@@ -59,7 +59,7 @@ export const workflowGroupController = {
   },
 
   update: async (req: Request, res: Response) => {
-    const data = UpdateGroupInputSchema.parse({ ...req.params, ...req.body });
+    const data = WorkflowGroupUpdateSchema.parse({ ...req.params, ...req.body });
     const workflow = await workflowService.update(data, req.actor);
 
     res.status(200).json({
@@ -71,7 +71,7 @@ export const workflowGroupController = {
   },
 
   get: async (req: Request, res: Response) => {
-    const { workflowId } = WorkflowIdInputSchema.parse({ ...req.params });
+    const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
     const { workflow, versions } = await workflowService.get(
       workflowId,
       req.actor
@@ -97,7 +97,7 @@ export const workflowGroupController = {
   },
 
   delete: async (req: Request, res: Response) => {
-    const { workflowId } = WorkflowIdInputSchema.parse({ ...req.params });
+    const { workflowId } = WorkflowIdSchema.parse({ ...req.params });
     await workflowService.delete(workflowId, req.actor);
     res.status(200).json({});
   },

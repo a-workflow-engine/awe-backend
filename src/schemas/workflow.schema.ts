@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const WorkflowGroupInputSchema = z.object({
+export const WorkflowGroupCreateSchema = z.object({
   name: z.string().max(255),
   description: z
     .string()
@@ -8,12 +8,12 @@ export const WorkflowGroupInputSchema = z.object({
     .transform((val) => val ?? null),
 });
 
-export const UpdateGroupInputSchema = z.object({
+export const WorkflowGroupUpdateSchema = z.object({
   workflowId: z.uuidv4(),
   name: z.string().max(255).optional(),
   description: z.string().optional().nullable(),
 });
 
-export const WorkflowIdInputSchema = z.object({
+export const WorkflowIdSchema = z.object({
   workflowId: z.uuidv4(),
 });
