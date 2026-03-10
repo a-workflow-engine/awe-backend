@@ -1,4 +1,4 @@
-import { Router, type RequestHandler } from "express";
+import { Router } from "express";
 import { systemController } from "../controllers/system.controller.js";
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
 import { apiKeyController } from "../controllers/apiKey.controller.js";

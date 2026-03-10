@@ -2,8 +2,7 @@ import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type { Environment, DB } from "../types/database.js";
 import type { Insertable, Transaction } from "kysely";
-import type { ActorModel, EnvironmentModel } from "../types/models.js";
-import { ActorTypes } from "../types/enums.js";
+import type { EnvironmentModel } from "../types/models.js";
 
 type NewEnvironment = Insertable<Environment>;
 
@@ -36,6 +35,23 @@ export const environmentRepository = {
       .innerJoin("organization", "organization.id", "system.organization_id")
       .selectAll("environment")
       .where("organization.actor_id", "=", actorId)
+      .where("organization.is_deleted", "=", false)
+      .where("system.is_deleted", "=", false)
+      .where("environment.is_deleted", "=", false)
+      .execute();
+  },
+
+  findByApiKeyActorId: async (
+    actorId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<EnvironmentModel[]> => {
+    return await (transaction ?? db)
+      .selectFrom("environment")
+      .innerJoin("api_key", "api_key.environment_id", "environment.id")
+      .selectAll("environment")
+      .where("api_key.actor_id", "=", actorId)
+      .where("api_key.is_revoked", "=", false)
+      .where("api_key.is_deleted", "=", false)
       .where("environment.is_deleted", "=", false)
       .execute();
   },
