@@ -1,16 +1,16 @@
 import type { Request, Response } from "express";
 import { workflowVersionService } from "../services/workflowVersion.service.js";
 import {
-  WorkflowVersionCreateRequestSchema,
-  WorkflowVersionDetailRequestSchema,
-  WorkflowVersionUpdateStatusRequestSchema,
-  WorkflowVersionValidateRequestSchema,
+  WorkflowVersionCreateSchema,
+  WorkflowVersionDetailSchema,
+  WorkflowVersionUpdateStatusSchema,
+  WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
 
 export const workflowVersionController = {
   create: async (req: Request, res: Response) => {
 
-    const data = WorkflowVersionCreateRequestSchema.parse({
+    const data = WorkflowVersionCreateSchema.parse({
       ...req.body,
       workflowId: req.params.workflowId, 
       actor: req.actor
@@ -27,7 +27,7 @@ export const workflowVersionController = {
   },
 
   validate: async (req: Request, res: Response) => {
-    const data = WorkflowVersionValidateRequestSchema.parse({
+    const data = WorkflowVersionValidateSchema.parse({
       ...req.params,
       actor: req.actor,
     });
@@ -45,7 +45,7 @@ export const workflowVersionController = {
   },
 
   get: async (req: Request, res: Response) => {
-    const data = WorkflowVersionDetailRequestSchema.parse({
+    const data = WorkflowVersionDetailSchema.parse({
       ...req.params,
       actor: req.actor,
     });
@@ -67,7 +67,7 @@ export const workflowVersionController = {
   },
 
   updateStatus: async (req: Request, res: Response) => {
-    const data = WorkflowVersionUpdateStatusRequestSchema.parse({
+    const data = WorkflowVersionUpdateStatusSchema.parse({
       ...req.params,
       ...req.body,
       actor: req.actor,

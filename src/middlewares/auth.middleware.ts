@@ -19,7 +19,6 @@ export const authenticateRequest = async (
 ) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
-    console.log(authHeader)
     throw new AuthError();
   }
 

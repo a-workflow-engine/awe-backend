@@ -3,7 +3,7 @@ import { ActorSchema } from "./actor.schema.js";
 import { NodeSchema, EdgeSchema } from "./node.schema.js";
 import { WorkflowVersionStatuses } from "../types/enums.js";
 
-export const WorkflowVersionCreateRequestSchema = z.object({
+export const WorkflowVersionCreateSchema = z.object({
   workflowId: z.uuidv4(),
   description: z.string().nullable().optional(),
   nodes: z.array(NodeSchema),
@@ -12,13 +12,13 @@ export const WorkflowVersionCreateRequestSchema = z.object({
   actor: ActorSchema
 })
 
-export const WorkflowVersionDetailRequestSchema = z.object({
+export const WorkflowVersionDetailSchema = z.object({
   workflowId: z.uuidv4(),
   version: z.coerce.number().min(1),
   actor: ActorSchema,
 });
 
-export const WorkflowVersionUpdateStatusRequestSchema = z.object({
+export const WorkflowVersionUpdateStatusSchema = z.object({
   workflowId: z.uuidv4(),
   version: z.coerce.number().min(1),
   actor: ActorSchema,
@@ -28,7 +28,7 @@ export const WorkflowVersionUpdateStatusRequestSchema = z.object({
   ]),
 });
 
-export const WorkflowVersionValidateRequestSchema = z.object({
+export const WorkflowVersionValidateSchema = z.object({
   workflowId: z.uuidv4(),
   version: z.coerce.number().min(1),
   actor: ActorSchema,

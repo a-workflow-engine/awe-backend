@@ -6,22 +6,22 @@ import type { Node, Edge } from "../types/workflow.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
 import {
-  WorkflowVersionCreateRequestSchema,
-  WorkflowVersionDetailRequestSchema,
-  WorkflowVersionUpdateStatusRequestSchema,
-  WorkflowVersionValidateRequestSchema,
+  WorkflowVersionCreateSchema,
+  WorkflowVersionDetailSchema,
+  WorkflowVersionUpdateStatusSchema,
+  WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
 import { z } from "zod";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { validateWorkflow } from "../utils.js";
 
-type DetailInput = z.infer<typeof WorkflowVersionDetailRequestSchema>;
+type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 type StatusPartialUpdateInput = z.infer<
-  typeof WorkflowVersionUpdateStatusRequestSchema
+  typeof WorkflowVersionUpdateStatusSchema
 >;
-type ValidateInput = z.infer<typeof WorkflowVersionValidateRequestSchema>;
+type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 
-export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateRequestSchema>;
+export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 
 export const workflowVersionService = {
   getDetail: async (data: DetailInput) => {
