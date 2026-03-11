@@ -43,11 +43,6 @@ export enum ValidationErrorCode {
   DECISION_RULES_EDGE_MISMATCH,
 }
 
-/**
- * Safely deserialises a node's configuration value from the DB.
- * PostgreSQL drivers may return JSON columns as a plain object or as a raw
- * string - this handles both without duplicating the cast at every call site.
- */
 function getConfiguration<T>(configuration: unknown): T {
   return (
     typeof configuration === "string"
@@ -78,30 +73,18 @@ export const workflowValidatorService = {
   validateAllNodes: (nodes: NodeModel[]): ValidationError[] => {
     const errors: ValidationError[] = [];
 
-    const startNodes = nodes.filter((n) => n.type === NodeTypes.START);
-    const endNodes = nodes.filter((n) => n.type === NodeTypes.END);
-
-    if (startNodes.length !== 1) {
-      errors.push({
-        code: ValidationErrorCode.START_NODE_MISSING_OR_MULTIPLE,
-        message: "Workflow must contain exactly one start node",
-      });
-    }
-
-    if (endNodes.length === 0) {
-      errors.push({
-        code: ValidationErrorCode.END_NODE_MISSING,
-        message: "Workflow must contain at least one end node",
-      });
-    }
+    let startNodes = 0;
+    let endNodes = 0;
 
     for (const node of nodes) {
       switch (node.type) {
         case NodeTypes.START:
           errors.push(...workflowValidatorService.validateStartNode(node));
+          startNodes++;
           break;
         case NodeTypes.END:
           errors.push(...workflowValidatorService.validateEndNode(node));
+          endNodes++;
           break;
         case NodeTypes.USER:
           errors.push(...workflowValidatorService.validateUserNode(node));
@@ -118,14 +101,23 @@ export const workflowValidatorService = {
       }
     }
 
+    if (startNodes !== 1) {
+      errors.push({
+        code: ValidationErrorCode.START_NODE_MISSING_OR_MULTIPLE,
+        message: "Workflow must contain exactly one start node",
+      });
+    }
+
+    if (endNodes === 0) {
+      errors.push({
+        code: ValidationErrorCode.END_NODE_MISSING,
+        message: "Workflow must contain at least one end node",
+      });
+    }
+
     return errors;
   },
 
-  /**
-   * Start node: validates each inputDataMap entry has a non-empty jsonPath
-   * and a non-empty context variable name.
-   * An empty inputDataMap is valid - the workflow accepts no inputs.
-   */
   validateStartNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<StartNodeConfiguration>(node.configuration);
@@ -152,11 +144,6 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  /**
-   * End node: validates each resultMap entry has a non-empty context variable
-   * name and a non-empty value expression.
-   * An empty resultMap is valid - the node may just signal success or failure.
-   */
   validateEndNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<EndNodeConfiguration>(node.configuration);
@@ -185,10 +172,6 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  /**
-   * User task: validates that every requestMap entry has a non-empty value
-   * expression and every responseMap entry has a non-empty field ID.
-   */
   validateUserNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<UserNodeConfiguration>(node.configuration);
@@ -220,10 +203,6 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  /**
-   * Service task: a blank URL expression would produce a broken HTTP call at
-   * runtime, so it is the critical configuration field to enforce here.
-   */
   validateServiceNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<ServiceNodeConfiguration>(
@@ -241,10 +220,6 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  /**
-   * Script task: both sourceCode and entryFunctionName are required for the
-   * runtime to be able to execute the script.
-   */
   validateScriptNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<ScriptNodeConfiguration>(
@@ -270,10 +245,6 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  /**
-   * Decision node: must have at least one conditional rule and every rule's
-   * condition expression must be non-empty.
-   */
   validateDecisionNode: (node: NodeModel): ValidationError[] => {
     const errors: ValidationError[] = [];
     const config = getConfiguration<DecisionNodeConfiguration>(
@@ -286,7 +257,6 @@ export const workflowValidatorService = {
         message: "Decision node must have at least one conditional rule",
         nodeId: node.client_id,
       });
-      // No point checking individual rule expressions when the array is empty.
       return errors;
     }
 
@@ -306,11 +276,6 @@ export const workflowValidatorService = {
   },
 
   // Edge validators
-  /**
-   * Validates structural edge integrity: every edge has a target node, the
-   * target and source nodes exist in the workflow, and illegal connections
-   * (end→*, *→start, self-loop) are rejected.
-   */
   validateAllEdges: (
     nodes: NodeModel[],
     edges: EdgeModel[],
@@ -374,23 +339,12 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  /**
-   * Validates decision-node edge completeness. For each decision node:
-   *   - Exactly one outgoing edge must have condition_expression = null (the
-   *     default branch).
-   *   - The number of conditional outgoing edges (condition_expression ≠ null)
-   *     must equal the number of configured rules.
-   *
-   * This pass runs only after validateAllEdges succeeds to guarantee that all
-   * edge source/target references are valid.
-   */
   validateDecisionEdges: (
     nodes: NodeModel[],
     edges: EdgeModel[],
   ): ValidationError[] => {
     const errors: ValidationError[] = [];
 
-    // Build outgoing-edge index keyed by DB node id
     const outgoingEdges = new Map<string, EdgeModel[]>();
     for (const edge of edges) {
       const group = outgoingEdges.get(edge.source_node_id) ?? [];
@@ -438,11 +392,6 @@ export const workflowValidatorService = {
   },
 
   // Graph topology validators
-
-  /**
-   * Validates graph topology: no directed cycles, all nodes reachable from the
-   * start node, and no non-end node is a dead end (zero outgoing edges).
-   */
 
   validateGraph: (
     nodes: NodeModel[],
