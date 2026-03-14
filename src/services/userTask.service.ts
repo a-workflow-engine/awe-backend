@@ -1,12 +1,15 @@
-import type { WorkflowContext, ExecutionResult } from "../types/workflow.type.js";
-import { taskService } from "./taskStore";
+import type {
+  WorkflowContext,
+  ExecutionResult,
+} from "../types/workflow.type.js";
+import { taskService } from "./task.service.js";
 import { executionEngine } from "../Engine/ExecutionEngine.js";
 
 //Resume workflow after user submits input
 export async function resumeUserTask(
   taskId: string,
   userInput: Record<string, any>,
-  context: WorkflowContext
+  context: WorkflowContext,
 ): Promise<ExecutionResult> {
   const task = await taskService.getTask(taskId);
 
@@ -19,10 +22,10 @@ export async function resumeUserTask(
   }
 
   //Mark task completed
-   
+
   await taskService.completeTask(taskId);
 
-//   Merge user input into workflow context
+  //   Merge user input into workflow context
   context.data = {
     ...context.data,
     ...userInput,
@@ -30,6 +33,6 @@ export async function resumeUserTask(
 
   context.status = "RUNNING";
 
-//   Continue workflow
+  //   Continue workflow
   return executionEngine.executeNext(context, task.nodeId);
 }

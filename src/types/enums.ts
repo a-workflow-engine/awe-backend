@@ -34,6 +34,21 @@ export const WorkflowVersionStatuses = {
   ACTIVE: "active",
 } as const satisfies Record<string, WorkflowVersionStatus>;
 
+export const InstanceStatuses = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  IN_PROGRESS: "in_progress",
+  PAUSED: "paused",
+  TERMINATED: "terminated",
+} as const satisfies Record<string, InstanceStatus>;
+
+export const TaskStatuses = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  IN_PROGRESS: "in_progress",
+  TERMINATED: "terminated",
+} as const satisfies Record<string, TaskStatus>;
+
 export enum FeelDataType {
   NUMBER = "number",
   STRING = "string",
@@ -50,20 +65,3 @@ export enum ContextVariableScopeType {
   GLOBAL = "global",
   NEXT = "next",
 }
-
-export const IndtanceStatus ={
-  COMPLETED: "completed",
-  FAILED: "failed",
-  IN_PROGRESS: "in_progress",
-  PAUSED: "paused",
-  TERMINATED: "terminated",
-} as const satisfies Record<string, InstanceStatus>;
-
-export const TaskStatuses = {
-  COMPLETED: "completed",
-  FAILED: "failed",
-  IN_PROGRESS: "in_progress",
-  TERMINATED: "terminated",
-} as const satisfies Record<string, TaskStatus>;
-
-
