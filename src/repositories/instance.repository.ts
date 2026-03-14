@@ -30,10 +30,9 @@ export const instanceRepository = {
       }
 
       return await (transaction ?? db)
-        .updateTable("system")
+        .updateTable("instance")
         .set(data)
         .where("id", "=", id)
-        .where("is_deleted", "=", false)
         .returningAll()
         .executeTakeFirstOrThrow();
     } catch (err) {

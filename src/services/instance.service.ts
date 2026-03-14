@@ -8,6 +8,8 @@ import { InstanceStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { taskService } from "./task.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
+import type { Transaction } from "kysely";
+import type { DB } from "../types/database.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -42,13 +44,22 @@ export const instanceService = {
       await instanceService.updateContextVariables(
         instance.id,
         currentVaribles,
+        transaction,
       );
     });
   },
 
-  updateContextVariables: async (instanceId: string, data: object) => {
-    instanceRepository.updateById(instanceId, {
-      current_variables: converterUtils.objectToJsonValue(data),
-    });
+  updateContextVariables: async (
+    instanceId: string,
+    data: object,
+    transaction?: Transaction<DB>,
+  ) => {
+    instanceRepository.updateById(
+      instanceId,
+      {
+        current_variables: converterUtils.objectToJsonValue(data),
+      },
+      transaction,
+    );
   },
 };

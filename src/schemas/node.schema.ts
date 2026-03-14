@@ -48,7 +48,7 @@ export const StartNodeConfigurationSchema = z.object({
       id: z.string(),
       label: z.string().optional(),
       method: z.enum(["GET"]),
-      headers: HttpHeaderSchema.optional(),
+      headers: z.array(HttpHeaderSchema).optional(),
       urlExpression: z.string(),
     }),
   ),
