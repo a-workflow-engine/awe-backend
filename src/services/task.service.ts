@@ -12,7 +12,7 @@ import { converterUtils } from "../utils/converter.utils";
 
 interface StartTaskOutputVariables {
   constants: Record<string, unknown>;
-  fetchables: Record<string, string>;
+  fetchables: Record<string, { urlId: string; jsonPath: string }>;
   urls: Record<string, string>;
 }
 
@@ -53,8 +53,11 @@ export const taskService = {
 
       configuration.inputDataMap.forEach((dataMap) => {
         if (dataMap.fetchableId) {
-          outputVariables.fetchables[dataMap.contextVariableName] =
-            dataMap.fetchableId;
+          outputVariables.fetchables[dataMap.contextVariableName] = {
+            urlId: dataMap.fetchableId,
+            jsonPath: dataMap.jsonPath,
+          };
+
           return;
         }
 
