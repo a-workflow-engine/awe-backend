@@ -55,4 +55,21 @@ export const nodeRepository = {
       throw new RepositoryError("Insert node failed", err);
     }
   },
+
+  deleteByWorkflowVersionId: async (
+    workflowVersionId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<void> => {
+    try {
+      await (transaction ?? db)
+        .deleteFrom("node")
+        .where("workflow_version_id", "=", workflowVersionId)
+        .execute();
+    } catch (err) {
+      throw new RepositoryError(
+        `Delete nodes for workflowVersionId=${workflowVersionId} failed`,
+        err,
+      );
+    }
+  },
 };

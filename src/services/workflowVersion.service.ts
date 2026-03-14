@@ -8,6 +8,7 @@ import { nodeService } from "./node.services.js";
 import {
   WorkflowVersionCreateSchema,
   WorkflowVersionDetailSchema,
+  WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
 } from "../schemas/workflowVersion.schema.js";
@@ -22,6 +23,8 @@ type StatusPartialUpdateInput = z.infer<
 type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
+
+export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 
 export const workflowVersionService = {
   getDetail: async (data: DetailInput) => {
@@ -41,12 +44,57 @@ export const workflowVersionService = {
     return { workflowVersion, nodes, edges };
   },
 
-  update: async (sub: DetailInput, data: CreateVersionInput) => {
-    const workflowVersion =
-      await workflowVersionRepository.findByWorkflowIdAndVersion(
-        sub.workflowId,
-        sub.version,
+  update: async (data: UpdateVersionInput): Promise<WorkflowVersionModel> => {
+    return db.transaction().execute(async (transaction) => {
+      const workflowVersion =
+        await workflowVersionRepository.findByWorkflowIdAndVersion(
+          data.workflowId,
+          data.version,
+          transaction,
+        );
+
+      if (
+        workflowVersion.status !== WorkflowVersionStatuses.DRAFT &&
+        workflowVersion.status !== WorkflowVersionStatuses.VALID
+      ) {
+        throw new StateTransitionError(
+          `Workflow version ${data.version} cannot be updated because it is in ${workflowVersion.status} status`,
+        );
+      }
+
+      const existingNodes = await nodeService.getByWorkflowVersion(
+        workflowVersion,
+        transaction,
       );
+      await edgeService.deleteByNodes(existingNodes, transaction);
+      await nodeService.deleteByWorkflowVersion(workflowVersion, transaction);
+
+      const newNodes = await nodeService.createMany(
+        data.nodes,
+        data.actor,
+        workflowVersion,
+        transaction,
+      );
+      await edgeService.createMany(
+        data.edges,
+        newNodes,
+        data.actor,
+        transaction,
+      );
+
+      return await workflowVersionRepository.updateById(
+        workflowVersion.id,
+        {
+          ...(data.description !== undefined && {
+            description: data.description,
+          }),
+          modified_by: data.actor.id,
+          modified_on: new Date(),
+          status: WorkflowVersionStatuses.DRAFT,
+        },
+        transaction,
+      );
+    });
   },
 
   createNew: async (
