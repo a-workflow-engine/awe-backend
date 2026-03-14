@@ -1,5 +1,5 @@
 import type { Transaction } from "kysely";
-import type { InstanceModel } from "../types/models";
+import type { InstanceModel, TaskExecutionModel } from "../types/models";
 import type { DB, TaskStatus } from "../types/database";
 import { taskRepository } from "../repositories/task.repository";
 import { TaskStatuses } from "../types/enums";
@@ -20,7 +20,7 @@ export const taskService = {
   executeStartNode: async (
     instance: InstanceModel,
     transaction?: Transaction<DB>,
-  ): Promise<StartTaskOutputVariables> => {
+  ): Promise<TaskExecutionModel> => {
     const startedOn = new Date();
 
     const startNode =
@@ -64,7 +64,9 @@ export const taskService = {
 
       configuration.fetchables.forEach((f) => {
         const result = evaluate(f.urlExpression, outputVariables.constants);
-        if (result.warnings || typeof result.value !== "string") {
+        if (result.warnings.length > 0 || typeof result.value !== "string") {
+          console.log(typeof result.value);
+          console.error(result.warnings);
           throw new DataIntegrityError(
             `Invalid FEEL expression exists in configuration of start node fetchables nodeId=${startNode.id} and versionId=${instance.workflow_version_id}`,
           );
@@ -75,8 +77,12 @@ export const taskService = {
 
       status = TaskStatuses.COMPLETED;
     } catch (err) {
-      console.log(err);
+      console.error(err);
       status = TaskStatuses.FAILED;
+
+      if (err instanceof DataIntegrityError) {
+        throw err;
+      }
     } finally {
       const task = await taskRepository.insert(
         {
@@ -86,7 +92,7 @@ export const taskService = {
         },
         transaction,
       );
-      await taskExecutionRepository.insert(
+      const taskExecution = await taskExecutionRepository.insert(
         {
           status: status,
           task_id: task.id,
@@ -98,7 +104,7 @@ export const taskService = {
         transaction,
       );
 
-      return outputVariables;
+      return taskExecution;
     }
   },
 };
