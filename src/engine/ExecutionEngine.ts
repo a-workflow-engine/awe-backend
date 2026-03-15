@@ -36,15 +36,11 @@ export const executionEngine = {
     context: WorkflowContext,
   ): Promise<NodeRunResult> => {
     return db.transaction().execute(async (tx) => {
-      const nodes = await nodeRepository.findByWorkflowVersionId(
-        instance.workflow_version_id,
-        tx,
-      );
+      const node = await nodeRepository.findById(nodeId, tx);
 
-      const node = nodes.find((n) => n.id === nodeId);
       if (!node) {
         throw new DataIntegrityError(
-          `Node id=${nodeId} not found in workflow version`,
+          `Node id=${nodeId} not found in for instance id=${instance.id}`,
         );
       }
 
@@ -57,7 +53,23 @@ export const executionEngine = {
 
       const startedOn = new Date();
       const task = await taskRepository.insert(
-        { instance_id: instance.id, node_id: node.id, status: TaskStatuses.IN_PROGRESS },
+        {
+          instance_id: instance.id,
+          node_id: node.id,
+          status: TaskStatuses.IN_PROGRESS,
+        },
+        tx,
+      );
+
+      const taskExecution = await taskExecutionRepository.insert(
+        {
+          task_id: task.id,
+          status: TaskStatuses.IN_PROGRESS,
+          started_on: startedOn,
+          input_variables: converterUtils.objectToJsonValue(
+            contextManager.resolveForNode(context),
+          ),
+        },
         tx,
       );
 
@@ -72,20 +84,19 @@ export const executionEngine = {
         };
       }
 
-      await taskRepository.updateById(task.id, { status: result.status }, tx);
-      await taskExecutionRepository.insert(
+      await taskExecutionRepository.updateById(
+        taskExecution.id,
         {
-          task_id: task.id,
           status: result.status,
-          started_on: startedOn,
           ended_on: new Date(),
-          input_variables: converterUtils.objectToJsonValue(
-            contextManager.resolveForNode(context),
+          output_variables: converterUtils.objectToJsonValue(
+            result.outputVariables,
           ),
-          output_variables: converterUtils.objectToJsonValue(result.outputVariables),
         },
         tx,
       );
+
+      await taskRepository.updateById(task.id, { status: result.status }, tx);
 
       if (result.status === TaskStatuses.FAILED) {
         const updated = await instanceRepository.updateById(
@@ -110,7 +121,9 @@ export const executionEngine = {
           instance.id,
           {
             status: InstanceStatuses.COMPLETED,
-            output_variables: converterUtils.objectToJsonValue(result.outputVariables),
+            output_variables: converterUtils.objectToJsonValue(
+              result.outputVariables,
+            ),
             ended_on: new Date(),
           },
           tx,
@@ -120,11 +133,14 @@ export const executionEngine = {
 
       let updatedContext: WorkflowContext;
       if (node.type === NodeTypes.START) {
-        const constants = (result.outputVariables.constants ?? {}) as Record<string, unknown>;
-        updatedContext = contextManager.merge(context, constants, ContextVariableScopeType.GLOBAL);
+        updatedContext = { global: result.outputVariables, next: {} };
       } else {
         const cleared = contextManager.clearNextScope(context);
-        updatedContext = contextManager.merge(cleared, result.outputVariables, ContextVariableScopeType.GLOBAL);
+        updatedContext = contextManager.merge(
+          cleared,
+          result.outputVariables,
+          ContextVariableScopeType.GLOBAL,
+        );
       }
 
       const updatedInstance = await instanceRepository.updateById(
@@ -133,22 +149,13 @@ export const executionEngine = {
         tx,
       );
 
-      const edges = await edgeRepository.findByNodeIds(
-        nodes.map((n) => n.id),
-        tx,
-      );
+      const edges = await edgeRepository.findBySourceNodeId(nodeId, tx);
 
       let nextNodeIds: string[];
-      try {
-        nextNodeIds = edgeResolver.resolveNextNodeIds(node.id, updatedContext, edges, nodes);
-      } catch {
-        const updated = await instanceRepository.updateById(
-          instance.id,
-          { status: InstanceStatuses.FAILED, ended_on: new Date() },
-          tx,
-        );
-        return { outcome: "failed", instance: updated };
-      }
+
+      nextNodeIds = edges
+        .map((edge) => edge.destination_node_id)
+        .filter((id): id is string => id !== null);
 
       if (nextNodeIds.length === 0) {
         const updated = await instanceRepository.updateById(
@@ -159,7 +166,12 @@ export const executionEngine = {
         return { outcome: "failed", instance: updated };
       }
 
-      return { outcome: "next", instance: updatedInstance, nextNodeIds, context: updatedContext };
+      return {
+        outcome: "next",
+        instance: updatedInstance,
+        nextNodeIds,
+        context: updatedContext,
+      };
     });
   },
 };
