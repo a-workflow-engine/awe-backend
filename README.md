@@ -18,3 +18,25 @@ npm install
 ```
 npm run dev
 ```
+
+### 4. Run tests
+
+Run all tests:
+```
+npm test
+```
+
+Run tests in watch mode:
+```
+npm run test:watch
+```
+
+Run tests with coverage report:
+```
+npm run test:coverage
+```
+
+Run tests and generate a markdown report (`test-report.md`):
+```
+npm run test:report
+```

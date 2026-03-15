@@ -8,6 +8,21 @@ type NewTask = Insertable<Task>;
 type UpdateTask = Updateable<Task>;
 
 export const taskRepository = {
+  findById: async (
+    id: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel | undefined> => {
+    try {
+      return await (transaction ?? db)
+        .selectFrom("task")
+        .selectAll()
+        .where("id", "=", id)
+        .executeTakeFirst();
+    } catch (err) {
+      throw new RepositoryError(`Find task by id=${id} failed`, err);
+    }
+  },
+
   insert: async (
     data: NewTask,
     transaction?: Transaction<DB>,

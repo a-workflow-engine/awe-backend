@@ -1,15 +1,13 @@
 import type { Request, Response } from "express";
-import { resumeUserTask } from "../services/userTask.service.js";
+import { taskService } from "../services/task.service.js";
+import { TaskParamsSchema } from "../schemas/task.schema.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
 
-export async function resumeTask(req: Request, res: Response) {
-  try {
-    const { taskId, input } = req.body;
-    const context = req.body.context;
-
-    const result = await resumeUserTask(taskId, input, context);
-
-    res.json(result);
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-}
+export const taskController = {
+  getTask: async (req: Request, res: Response) => {
+    const { taskId } = TaskParamsSchema.parse(req.params);
+    const task = await taskService.getTask(taskId);
+    if (!task) throw new NotFoundError("Task");
+    return res.json({ task });
+  },
+};

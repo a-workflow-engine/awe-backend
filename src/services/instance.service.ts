@@ -4,9 +4,9 @@ import type { ActorModel } from "../types/models.js";
 import { z } from "zod";
 import { workflowVersionService } from "./workflowVersion.service.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
-import { InstanceStatuses, TaskStatuses } from "../types/enums.js";
+import { InstanceStatuses } from "../types/enums.js";
 import { db } from "../database.js";
-import { taskService } from "./task.service.js";
+import { executionEngine } from "../engine/ExecutionEngine.js";
 import { converterUtils } from "../utils/converter.utils.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
@@ -25,35 +25,15 @@ export const instanceService = {
       const instance = await instanceRepository.insert(
         {
           workflow_version_id: workflowVersion.id,
-
           started_on: new Date(),
           status: InstanceStatuses.IN_PROGRESS,
           input_variables: converterUtils.objectToJsonValue(data.context),
-
           created_by: actor.id,
         },
         transaction,
       );
 
-      const taskExecution = await taskService.executeStartNode(
-        instance,
-        transaction,
-      );
-
-      return await instanceRepository.updateById(
-        instance.id,
-        {
-          current_variables: converterUtils.objectToJsonValue(
-            taskExecution.output_variables as object,
-          ),
-
-          ...(taskExecution.status !== TaskStatuses.COMPLETED && {
-            status: InstanceStatuses.FAILED,
-            ended_on: new Date(),
-          }),
-        },
-        transaction,
-      );
+      return executionEngine.start(instance, transaction);
     });
   },
 };

@@ -5,8 +5,21 @@ export default {
   roots: ["<rootDir>/tests"],
 
   transform: {
-    "^.+\\.ts$": "ts-jest"
+    "^.+\\.ts$": "ts-jest",
+    "^.+\\.js$": ["ts-jest", {
+      tsconfig: {
+        allowJs: true,
+        module: "CommonJS",
+        verbatimModuleSyntax: false,
+        noUncheckedSideEffectImports: false,
+      },
+      diagnostics: false,
+    }],
   },
+
+  transformIgnorePatterns: [
+    "/node_modules/(?!(@bpmn-io|min-dash)/)"
+  ],
 
   setupFiles: ["<rootDir>/tests/setup.ts"],
 
