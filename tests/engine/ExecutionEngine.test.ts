@@ -3,20 +3,28 @@ import { taskRepository } from "../../src/repositories/task.repository.js";
 import { taskExecutionRepository } from "../../src/repositories/taskExecution.repository.js";
 import { nodeRepository } from "../../src/repositories/node.repository.js";
 import { edgeRepository } from "../../src/repositories/edge.repository.js";
-import { nodeService } from "../../src/services/node.services.js";
 import { StartNodeExecutor } from "../../src/engine/executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "../../src/engine/executors/EndNodeExecutor.js";
 import { executionEngine } from "../../src/engine/ExecutionEngine.js";
+import { edgeResolver } from "../../src/engine/EdgeResolver.js";
 import { TaskStatuses, InstanceStatuses, NodeTypes } from "../../src/types/enums.js";
 import { StateTransitionError } from "../../src/errors/StateTransitionError.js";
+import { DataIntegrityError } from "../../src/errors/DataIntegrity.js";
 import type { NodeModel, EdgeModel, InstanceModel, TaskModel } from "../../src/types/models.js";
+import type { WorkflowContext } from "../../src/engine/types.js";
 
+jest.mock("../../src/database.js", () => ({
+  db: {
+    transaction: jest.fn(() => ({
+      execute: jest.fn((fn: (tx: unknown) => unknown) => fn({})),
+    })),
+  },
+}));
 jest.mock("../../src/repositories/instance.repository.js");
 jest.mock("../../src/repositories/task.repository.js");
 jest.mock("../../src/repositories/taskExecution.repository.js");
 jest.mock("../../src/repositories/node.repository.js");
 jest.mock("../../src/repositories/edge.repository.js");
-jest.mock("../../src/services/node.services.js");
 jest.mock("../../src/engine/executors/StartNodeExecutor.js", () => ({
   StartNodeExecutor: jest.fn().mockImplementation(function (this: any) {
     this.execute = jest.fn();
@@ -28,12 +36,13 @@ jest.mock("../../src/engine/executors/EndNodeExecutor.js", () => ({
   }),
 }));
 
-const tx = {} as any;
+const emptyContext: WorkflowContext = { global: {}, next: {} };
 
 const mockInstance: InstanceModel = {
   id: "inst-1",
   workflow_version_id: "wfv-1",
   status: "in_progress",
+  auto_advance: true,
   input_variables: { amount: 500 },
   output_variables: null,
   current_variables: null,
@@ -87,15 +96,6 @@ const edgeStartToEnd: EdgeModel = {
   condition_expression: null,
 };
 
-const edgeStartToUser: EdgeModel = {
-  ...baseEdgeProps,
-  id: "edge-2",
-  client_id: "client-edge-2",
-  source_node_id: "node-start",
-  destination_node_id: "node-user",
-  condition_expression: null,
-};
-
 const mockTask1: TaskModel = { id: "task-1", instance_id: "inst-1", node_id: "node-start", status: "in_progress", created_on: new Date() };
 const mockTask2: TaskModel = { id: "task-2", instance_id: "inst-1", node_id: "node-end", status: "in_progress", created_on: new Date() };
 const mockInstanceWithVars: InstanceModel = { ...mockInstance, current_variables: { global: { amount: 500 }, next: {} } };
@@ -121,180 +121,149 @@ beforeAll(() => {
 });
 
 describe("ExecutionEngine", () => {
-  describe("start()", () => {
-    it("happy path: start node COMPLETED, end node COMPLETED → instance status becomes completed", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
-      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1).mockResolvedValueOnce(mockTask2);
-      startExecMock.mockResolvedValueOnce(completedStartResult);
-      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars).mockResolvedValueOnce(mockCompletedInstance);
+  describe("runNode()", () => {
+    it("start node COMPLETED → outcome 'next' with nextNodeIds", async () => {
       jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
+      startExecMock.mockResolvedValueOnce(completedStartResult);
+      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
       jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
+
+      const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(result.outcome).toBe("next");
+      if (result.outcome === "next") {
+        expect(result.nextNodeIds).toContain("node-end");
+      }
+    });
+
+    it("end node COMPLETED → outcome 'completed', instance status completed", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask2);
       endExecMock.mockResolvedValueOnce(completedEndResult);
+      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockCompletedInstance);
 
-      const result = await executionEngine.start(mockInstance, tx);
-      expect(result.status).toBe(InstanceStatuses.COMPLETED);
+      const result = await executionEngine.runNode(mockInstance, "node-end", emptyContext);
+      expect(result.outcome).toBe("completed");
+      expect(result.instance.status).toBe(InstanceStatuses.COMPLETED);
     });
 
-    it("nodeService throws → error propagates out of start()", async () => {
-      jest
-        .mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow)
-        .mockRejectedValueOnce(new Error("start node not found"));
-      await expect(executionEngine.start(mockInstance, tx)).rejects.toThrow("start node not found");
-    });
-
-    it("StartNodeExecutor returns FAILED → instanceRepository.updateById called with status failed", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
+    it("executor returns FAILED → outcome 'failed', instanceRepository.updateById called with FAILED", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
       jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
       startExecMock.mockResolvedValueOnce({ status: TaskStatuses.FAILED, outputVariables: {}, error: "executor failed" });
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockFailedInstance);
 
-      const result = await executionEngine.start(mockInstance, tx);
-      expect(result.status).toBe(InstanceStatuses.FAILED);
+      const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(result.outcome).toBe("failed");
       expect(jest.mocked(instanceRepository.updateById)).toHaveBeenCalledWith(
         mockInstance.id,
         expect.objectContaining({ status: InstanceStatuses.FAILED }),
-        tx,
+        {},
       );
     });
 
-    it("StartNodeExecutor throws → treated as FAILED, instanceRepository.updateById called with failed", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
+    it("executor throws → treated as FAILED, outcome 'failed'", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
       jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
       startExecMock.mockRejectedValueOnce(new Error("unexpected crash"));
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockFailedInstance);
 
-      const result = await executionEngine.start(mockInstance, tx);
-      expect(result.status).toBe(InstanceStatuses.FAILED);
+      const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(result.outcome).toBe("failed");
     });
 
-    it("no outgoing edges from start node → instance marked FAILED", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
+    it("nodeId not found in workflow version → throws DataIntegrityError", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
+
+      await expect(
+        executionEngine.runNode(mockInstance, "nonexistent-node", emptyContext),
+      ).rejects.toThrow(DataIntegrityError);
+    });
+
+    it("node type has no registered executor → throws StateTransitionError", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, userNode]);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
+
+      await expect(
+        executionEngine.runNode(mockInstance, "node-user", emptyContext),
+      ).rejects.toThrow(StateTransitionError);
+    });
+
+    it("no outgoing edges → outcome 'failed'", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
       jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
       startExecMock.mockResolvedValueOnce(completedStartResult);
       jest.mocked(instanceRepository.updateById)
         .mockResolvedValueOnce(mockInstanceWithVars)
         .mockResolvedValueOnce(mockFailedInstance);
-      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode]);
       jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([]);
 
-      const result = await executionEngine.start(mockInstance, tx);
-      expect(result.status).toBe(InstanceStatuses.FAILED);
+      const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(result.outcome).toBe("failed");
     });
 
-    it("EndNodeExecutor returns FAILED → instanceRepository.updateById called with status failed", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
-      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1).mockResolvedValueOnce(mockTask2);
-      startExecMock.mockResolvedValueOnce(completedStartResult);
-      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars).mockResolvedValueOnce(mockFailedInstance);
+    it("end node FAILED → outcome 'failed'", async () => {
       jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
-      jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask2);
       endExecMock.mockResolvedValueOnce({ status: TaskStatuses.FAILED, outputVariables: {}, error: "end failed" });
+      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockFailedInstance);
 
-      const result = await executionEngine.start(mockInstance, tx);
-      expect(result.status).toBe(InstanceStatuses.FAILED);
+      const result = await executionEngine.runNode(mockInstance, "node-end", emptyContext);
+      expect(result.outcome).toBe("failed");
     });
 
-    it("EndNodeExecutor returns COMPLETED → instanceRepository.updateById called with status completed", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
-      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1).mockResolvedValueOnce(mockTask2);
-      startExecMock.mockResolvedValueOnce(completedStartResult);
-      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars).mockResolvedValueOnce(mockCompletedInstance);
+    it("edgeResolver throws StateTransitionError → outcome 'failed'", async () => {
+      const spy = jest.spyOn(edgeResolver, "resolveNextNodeIds").mockImplementationOnce(() => {
+        throw new StateTransitionError("No matching condition and no default edge on decision node");
+      });
+
       jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
+      startExecMock.mockResolvedValueOnce({ status: TaskStatuses.COMPLETED, outputVariables: { constants: {}, fetchables: {}, urls: {} } });
+      jest.mocked(instanceRepository.updateById)
+        .mockResolvedValueOnce(mockInstanceWithVars)
+        .mockResolvedValueOnce(mockFailedInstance);
       jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
-      endExecMock.mockResolvedValueOnce(completedEndResult);
 
-      await executionEngine.start(mockInstance, tx);
-      expect(jest.mocked(instanceRepository.updateById)).toHaveBeenCalledWith(
-        mockInstance.id,
-        expect.objectContaining({ status: InstanceStatuses.COMPLETED }),
-        tx,
-      );
+      const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(result.outcome).toBe("failed");
+      spy.mockRestore();
     });
 
-    it("next node has no registered executor → StateTransitionError propagates", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
+    it("taskRepository.insert is called once per runNode call", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
       jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
       startExecMock.mockResolvedValueOnce(completedStartResult);
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
-      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, userNode]);
-      jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToUser]);
+      jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
 
-      await expect(executionEngine.start(mockInstance, tx)).rejects.toThrow(StateTransitionError);
+      await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(jest.mocked(taskRepository.insert)).toHaveBeenCalledTimes(1);
     });
 
-    it("edgeResolver throws StateTransitionError (broken decision) → instance marked FAILED", async () => {
-      const decisionAliasNode: NodeModel = {
-        ...baseNodeProps,
-        id: "node-start",
-        client_id: "client-start",
-        type: NodeTypes.DECISION,
-      };
-      const conditionalEdge: EdgeModel = {
-        ...baseEdgeProps,
-        id: "edge-cond",
-        client_id: "client-edge-cond",
-        source_node_id: "node-start",
-        destination_node_id: "node-end",
-        condition_expression: "unmatchableValue > 99999",
-      };
-
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
+    it("taskExecutionRepository.insert is called once per runNode call", async () => {
+      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
       jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
-      startExecMock.mockResolvedValueOnce({
-        status: TaskStatuses.COMPLETED,
-        outputVariables: { constants: {}, fetchables: {}, urls: {} },
-      });
-      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars).mockResolvedValueOnce(mockFailedInstance);
-      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([decisionAliasNode]);
-      jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([conditionalEdge]);
+      startExecMock.mockResolvedValueOnce(completedStartResult);
+      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
+      jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
 
-      const result = await executionEngine.start(mockInstance, tx);
-      expect(result.status).toBe(InstanceStatuses.FAILED);
+      await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(jest.mocked(taskExecutionRepository.insert)).toHaveBeenCalledTimes(1);
     });
 
-    it("taskRepository.insert is called once for start node and once for end node", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
-      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1).mockResolvedValueOnce(mockTask2);
-      startExecMock.mockResolvedValueOnce(completedStartResult);
-      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars).mockResolvedValueOnce(mockCompletedInstance);
+    it("constants from start node output are merged into context returned in 'next' outcome", async () => {
       jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
-      jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
-      endExecMock.mockResolvedValueOnce(completedEndResult);
-
-      await executionEngine.start(mockInstance, tx);
-      expect(jest.mocked(taskRepository.insert)).toHaveBeenCalledTimes(2);
-    });
-
-    it("taskExecutionRepository.insert is called twice (once per node)", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
-      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1).mockResolvedValueOnce(mockTask2);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1);
       startExecMock.mockResolvedValueOnce(completedStartResult);
-      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars).mockResolvedValueOnce(mockCompletedInstance);
-      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
+      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
       jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
-      endExecMock.mockResolvedValueOnce(completedEndResult);
 
-      await executionEngine.start(mockInstance, tx);
-      expect(jest.mocked(taskExecutionRepository.insert)).toHaveBeenCalledTimes(2);
-    });
-
-    it("constants from start node output are merged into current_variables before advancing", async () => {
-      jest.mocked(nodeService.getByStartNodeByWorkflowVersionIdOrThrow).mockResolvedValueOnce(startNode);
-      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTask1).mockResolvedValueOnce(mockTask2);
-      startExecMock.mockResolvedValueOnce(completedStartResult);
-      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars).mockResolvedValueOnce(mockCompletedInstance);
-      jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce([startNode, endNode]);
-      jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce([edgeStartToEnd]);
-      endExecMock.mockResolvedValueOnce(completedEndResult);
-
-      await executionEngine.start(mockInstance, tx);
-      expect(jest.mocked(instanceRepository.updateById)).toHaveBeenCalledWith(
-        mockInstance.id,
-        expect.objectContaining({
-          current_variables: { global: { amount: 500 }, next: {} },
-        }),
-        tx,
-      );
+      const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
+      expect(result.outcome).toBe("next");
+      if (result.outcome === "next") {
+        expect(result.context.global).toMatchObject({ amount: 500 });
+      }
     });
   });
 });

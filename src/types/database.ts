@@ -469,6 +469,7 @@ export interface ExtensionsPgStatStatementsInfo {
 }
 
 export interface Instance {
+  auto_advance: Generated<boolean>;
   created_by: string;
   created_on: Generated<Timestamp>;
   current_variables: Json | null;

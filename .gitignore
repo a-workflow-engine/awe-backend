@@ -140,7 +140,7 @@ dist
 !.yarn/sdks
 !.yarn/versions
 
-# Vite files
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
-.vite/
+# Generated test & report artifacts
+test-report.json
+test-report.md
+coverage/

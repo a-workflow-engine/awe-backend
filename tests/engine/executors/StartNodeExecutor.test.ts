@@ -11,6 +11,7 @@ const mockInstance: InstanceModel = {
   id: "inst-1",
   workflow_version_id: "wfv-1",
   status: "in_progress",
+  auto_advance: true,
   input_variables: { amount: 500, label: "test" },
   output_variables: null,
   current_variables: null,

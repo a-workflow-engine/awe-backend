@@ -3,6 +3,7 @@ import type { DB, Task } from "../types/database.js";
 import type { Insertable, Updateable, Transaction } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type { TaskModel } from "../types/models.js";
+import { TaskStatuses } from "../types/enums.js";
 
 type NewTask = Insertable<Task>;
 type UpdateTask = Updateable<Task>;
@@ -20,6 +21,27 @@ export const taskRepository = {
         .executeTakeFirst();
     } catch (err) {
       throw new RepositoryError(`Find task by id=${id} failed`, err);
+    }
+  },
+
+  findLastCompletedByInstanceId: async (
+    instanceId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel | undefined> => {
+    try {
+      return await (transaction ?? db)
+        .selectFrom("task")
+        .selectAll()
+        .where("instance_id", "=", instanceId)
+        .where("status", "=", TaskStatuses.COMPLETED)
+        .orderBy("created_on", "desc")
+        .limit(1)
+        .executeTakeFirst();
+    } catch (err) {
+      throw new RepositoryError(
+        `Find last completed task for instance id=${instanceId} failed`,
+        err,
+      );
     }
   },
 

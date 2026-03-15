@@ -4,6 +4,8 @@ export default {
 
   roots: ["<rootDir>/tests"],
 
+  testMatch: ["**/*.test.ts"],
+
   transform: {
     "^.+\\.ts$": "ts-jest",
     "^.+\\.js$": ["ts-jest", {
