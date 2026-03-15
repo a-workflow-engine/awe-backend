@@ -6,26 +6,16 @@ import type {
   TaskModel,
 } from "../types/models.js";
 import type { ExecutorResult, WorkflowContext } from "./types.js";
-import type { NodeRunResult } from "./queue/types.js";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { taskRepository } from "../repositories/task.repository.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
-import { nodeRepository } from "../repositories/node.repository.js";
-import { edgeRepository } from "../repositories/edge.repository.js";
 import { contextManager } from "./ContextManager.js";
-import { edgeResolver } from "./EdgeResolver.js";
 import { StartNodeExecutor } from "./executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "./executors/EndNodeExecutor.js";
 import { UserTaskExecutor } from "./executors/UserTaskExecutor.js";
 import type { BaseExecutor } from "./executors/BaseExecutor.js";
-import {
-  ContextVariableScopeType,
-  InstanceStatuses,
-  NodeTypes,
-  TaskStatuses,
-} from "../types/enums.js";
+import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { converterUtils } from "../utils/converter.utils.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 
 const executors: Partial<Record<string, BaseExecutor>> = {

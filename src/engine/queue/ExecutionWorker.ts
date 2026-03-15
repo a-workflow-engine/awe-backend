@@ -17,6 +17,7 @@ import { converterUtils } from "../../utils/converter.utils.js";
 import { contextManager } from "../ContextManager.js";
 import type { WorkflowContext } from "../types.js";
 import { edgeRepository } from "../../repositories/edge.repository.js";
+import { edgeService } from "../../services/edge.services.js";
 
 const JOB_OPTIONS = {
   attempts: 3,
@@ -120,14 +121,18 @@ export class ExecutionWorker {
       );
 
       if (!instance.auto_advance) {
+        await instanceRepository.updateById(
+          instance.id,
+          { status: InstanceStatuses.PAUSED },
+          tx,
+        );
         return;
       }
 
-      const edges = await edgeRepository.findBySourceNodeId(nodeId, tx);
-
-      const nextNodeIds = edges
-        .map((edge) => edge.destination_node_id)
-        .filter((id): id is string => id !== null);
+      const nextNodeIds = await edgeService.getNextNodeIdsBySourceNodeId(
+        nodeId,
+        tx,
+      );
 
       if (nextNodeIds.length === 0) {
         await instanceRepository.updateById(
