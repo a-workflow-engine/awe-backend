@@ -55,7 +55,7 @@ export class EndNodeExecutor extends BaseExecutor {
     }
 
     if (configuration.message) {
-      outputVariables._message = configuration.message;
+      outputVariables.message = configuration.message;
     }
 
     return {

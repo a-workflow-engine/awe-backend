@@ -76,33 +76,33 @@ describe("instanceController", () => {
     });
   });
 
-  describe("resumeInstance()", () => {
-    it("returns updated instance when resume succeeds", async () => {
-      jest.mocked(instanceService.resumeInstance).mockResolvedValueOnce({ ...mockPausedInstance, status: InstanceStatuses.IN_PROGRESS });
+  describe("advance()", () => {
+    it("returns updated instance when advance succeeds", async () => {
+      jest.mocked(instanceService.advanceInstance).mockResolvedValueOnce({ ...mockPausedInstance, status: InstanceStatuses.IN_PROGRESS });
       const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
-      await instanceController.resumeInstance(req as any, res as any);
+      await instanceController.advance(req as any, res as any);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ instance: expect.objectContaining({ status: InstanceStatuses.IN_PROGRESS }) }));
     });
 
     it("throws ZodError when instanceId is not a valid UUID", async () => {
       const req = mockRequest({ params: { instanceId: "bad-id" }, actor: mockActor });
       const res = mockResponse();
-      await expect(instanceController.resumeInstance(req as any, res as any)).rejects.toThrow(ZodError);
+      await expect(instanceController.advance(req as any, res as any)).rejects.toThrow(ZodError);
     });
 
     it("propagates StateTransitionError when instance is not paused", async () => {
-      jest.mocked(instanceService.resumeInstance).mockRejectedValueOnce(new StateTransitionError("not paused"));
+      jest.mocked(instanceService.advanceInstance).mockRejectedValueOnce(new StateTransitionError("not paused"));
       const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
-      await expect(instanceController.resumeInstance(req as any, res as any)).rejects.toThrow(StateTransitionError);
+      await expect(instanceController.advance(req as any, res as any)).rejects.toThrow(StateTransitionError);
     });
 
     it("propagates NotFoundError when instance does not exist", async () => {
-      jest.mocked(instanceService.resumeInstance).mockRejectedValueOnce(new NotFoundError("not found"));
+      jest.mocked(instanceService.advanceInstance).mockRejectedValueOnce(new NotFoundError("not found"));
       const req = mockRequest({ params: { instanceId: VALID_UUID }, actor: mockActor });
       const res = mockResponse();
-      await expect(instanceController.resumeInstance(req as any, res as any)).rejects.toThrow(NotFoundError);
+      await expect(instanceController.advance(req as any, res as any)).rejects.toThrow(NotFoundError);
     });
   });
 });

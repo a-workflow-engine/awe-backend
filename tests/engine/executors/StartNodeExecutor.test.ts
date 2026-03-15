@@ -74,7 +74,7 @@ describe("StartNodeExecutor", () => {
     const constants = result.outputVariables.constants as Record<string, unknown>;
     const fetchables = result.outputVariables.fetchables as Record<string, unknown>;
     expect(constants["userVar"]).toBeUndefined();
-    expect(fetchables["userVar"]).toEqual({ urlId: "fetch-user", jsonPath: "userId" });
+    expect(fetchables["userVar"]).toEqual({ urlId: "fetch-user", jsonPath: "userId", dataType: "string" });
   });
 
   it("stores multiple fetchable entries as metadata when they share a fetchableId", async () => {
@@ -87,9 +87,9 @@ describe("StartNodeExecutor", () => {
     });
     const result = await executor.execute(mockInstance, node, emptyContext, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
-    const fetchables = result.outputVariables.fetchables as Record<string, { urlId: string; jsonPath: string }>;
-    expect(fetchables["userName"]).toEqual({ urlId: "fetch-profile", jsonPath: "name" });
-    expect(fetchables["userAge"]).toEqual({ urlId: "fetch-profile", jsonPath: "age" });
+    const fetchables = result.outputVariables.fetchables as Record<string, { urlId: string; jsonPath: string; dataType: string }>;
+    expect(fetchables["userName"]).toEqual({ urlId: "fetch-profile", jsonPath: "name", dataType: "string" });
+    expect(fetchables["userAge"]).toEqual({ urlId: "fetch-profile", jsonPath: "age", dataType: "number" });
     const constants = result.outputVariables.constants as Record<string, unknown>;
     expect(constants["userName"]).toBeUndefined();
     expect(constants["userAge"]).toBeUndefined();

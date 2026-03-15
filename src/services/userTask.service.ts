@@ -22,21 +22,32 @@ export async function resumeUserTask(
   const task = await taskRepository.findById(taskId);
   if (!task) throw new NotFoundError(`Task id=${taskId}`);
   if (task.status !== TaskStatuses.IN_PROGRESS) {
-    throw new StateTransitionError(`Task id=${taskId} is not awaiting user input`);
+    throw new StateTransitionError(
+      `Task id=${taskId} is not awaiting user input`,
+    );
   }
 
-  const instance = await instanceRepository.findByIdForActor(task.instance_id, actorId);
-  if (!instance) throw new NotFoundError(`Instance not found for task id=${taskId}`);
+  const instance = await instanceRepository.findByIdForActor(
+    task.instance_id,
+    actorId,
+  );
+  if (!instance)
+    throw new NotFoundError(`Instance not found for task id=${taskId}`);
   if (instance.status !== InstanceStatuses.PAUSED) {
     throw new StateTransitionError(`Instance id=${instance.id} is not paused`);
   }
 
-  const nodes = await nodeRepository.findByWorkflowVersionId(instance.workflow_version_id);
+  const nodes = await nodeRepository.findByWorkflowVersionId(
+    instance.workflow_version_id,
+  );
   const node = nodes.find((n) => n.id === task.node_id);
   if (!node) throw new DataIntegrityError(`Node id=${task.node_id} not found`);
 
   const parsed = UserNodeConfigurationSchema.safeParse(node.configuration);
-  if (!parsed.data) throw new DataIntegrityError(`User node configuration invalid for node id=${node.id}`);
+  if (!parsed.data)
+    throw new DataIntegrityError(
+      `User node configuration invalid for node id=${node.id}`,
+    );
 
   const outputVariables: Record<string, unknown> = {};
   for (const field of parsed.data.responseMap) {
@@ -48,26 +59,44 @@ export async function resumeUserTask(
   const edges = await edgeRepository.findByNodeIds(nodes.map((n) => n.id));
   const context = contextManager.fromJson(instance.current_variables);
   const updatedContext = contextManager.merge(context, outputVariables);
-  const nextNodeIds = edgeResolver.resolveNextNodeIds(task.node_id, updatedContext, edges, nodes);
+  const nextNodeIds = await edgeResolver.resolveNextNodeIds(
+    task.node_id,
+    updatedContext,
+    edges,
+    nodes,
+    instance.id,
+  );
 
   await db.transaction().execute(async (tx) => {
-    await taskRepository.updateById(taskId, { status: TaskStatuses.COMPLETED }, tx);
-    await instanceRepository.updateById(instance.id, {
-      status: InstanceStatuses.IN_PROGRESS,
-      current_variables: converterUtils.objectToJsonValue(updatedContext),
-    }, tx);
+    await taskRepository.updateById(
+      taskId,
+      { status: TaskStatuses.COMPLETED },
+      tx,
+    );
+    await instanceRepository.updateById(
+      instance.id,
+      {
+        status: InstanceStatuses.IN_PROGRESS,
+        current_variables: converterUtils.objectToJsonValue(updatedContext),
+      },
+      tx,
+    );
   });
 
   executionLogger.userTaskCompleted({
     taskId,
-    instanceId:     instance.id,
+    instanceId: instance.id,
     actorId,
-    completedAt:    new Date(),
+    completedAt: new Date(),
     userInput,
     contextUpdates: outputVariables,
   });
 
   for (const nodeId of nextNodeIds) {
-    await queueService.enqueue({ instanceId: instance.id, nodeId, context: updatedContext });
+    await queueService.enqueue({
+      instanceId: instance.id,
+      nodeId,
+      context: updatedContext,
+    });
   }
 }

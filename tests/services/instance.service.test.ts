@@ -111,32 +111,32 @@ describe("instanceService", () => {
     });
   });
 
-  describe("resumeInstance()", () => {
+  describe("advanceInstance()", () => {
     it("throws NotFoundError when instance does not exist", async () => {
       jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(undefined);
-      await expect(instanceService.resumeInstance("nonexistent", "actor-1")).rejects.toThrow(NotFoundError);
+      await expect(instanceService.advanceInstance("nonexistent", "actor-1")).rejects.toThrow(NotFoundError);
     });
 
     it("throws StateTransitionError when instance is not paused", async () => {
       jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockInstance);
-      await expect(instanceService.resumeInstance("inst-1", "actor-1")).rejects.toThrow(StateTransitionError);
+      await expect(instanceService.advanceInstance("inst-1", "actor-1")).rejects.toThrow(StateTransitionError);
     });
 
-    it("throws DataIntegrityError when no completed task found", async () => {
+    it("throws DataIntegrityError when no task found", async () => {
       jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockPausedInstance);
-      jest.mocked(taskRepository.findLastCompletedByInstanceId).mockResolvedValueOnce(undefined);
-      await expect(instanceService.resumeInstance("inst-1", "actor-1")).rejects.toThrow(DataIntegrityError);
+      jest.mocked(taskRepository.findLastCreatedByInstanceId).mockResolvedValueOnce(undefined);
+      await expect(instanceService.advanceInstance("inst-1", "actor-1")).rejects.toThrow(DataIntegrityError);
     });
 
     it("enqueues next nodes and updates instance to IN_PROGRESS for paused instance", async () => {
       jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockPausedInstance);
-      jest.mocked(taskRepository.findLastCompletedByInstanceId).mockResolvedValueOnce(mockTask);
+      jest.mocked(taskRepository.findLastCreatedByInstanceId).mockResolvedValueOnce(mockTask);
       jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce(mockNodes);
       jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce(mockEdges);
-      jest.mocked(edgeResolver.resolveNextNodeIds).mockReturnValueOnce(["node-next"]);
+      jest.mocked(edgeResolver.resolveNextNodeIds).mockResolvedValueOnce(["node-next"]);
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce({ ...mockPausedInstance, status: InstanceStatuses.IN_PROGRESS });
 
-      const result = await instanceService.resumeInstance("inst-1", "actor-1");
+      const result = await instanceService.advanceInstance("inst-1", "actor-1");
 
       expect(instanceRepository.updateById).toHaveBeenCalledWith("inst-1", { status: InstanceStatuses.IN_PROGRESS });
       expect(queueService.enqueue).toHaveBeenCalledWith(
@@ -147,13 +147,13 @@ describe("instanceService", () => {
 
     it("enqueues multiple next nodes when edge resolver returns multiple IDs", async () => {
       jest.mocked(instanceRepository.findByIdForActor).mockResolvedValueOnce(mockPausedInstance);
-      jest.mocked(taskRepository.findLastCompletedByInstanceId).mockResolvedValueOnce(mockTask);
+      jest.mocked(taskRepository.findLastCreatedByInstanceId).mockResolvedValueOnce(mockTask);
       jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce(mockNodes);
       jest.mocked(edgeRepository.findByNodeIds).mockResolvedValueOnce(mockEdges);
-      jest.mocked(edgeResolver.resolveNextNodeIds).mockReturnValueOnce(["node-a", "node-b"]);
+      jest.mocked(edgeResolver.resolveNextNodeIds).mockResolvedValueOnce(["node-a", "node-b"]);
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce({ ...mockPausedInstance, status: InstanceStatuses.IN_PROGRESS });
 
-      await instanceService.resumeInstance("inst-1", "actor-1");
+      await instanceService.advanceInstance("inst-1", "actor-1");
       expect(queueService.enqueue).toHaveBeenCalledTimes(2);
     });
   });

@@ -6,6 +6,8 @@ import { edgeRepository } from "../../src/repositories/edge.repository.js";
 import { StartNodeExecutor } from "../../src/engine/executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "../../src/engine/executors/EndNodeExecutor.js";
 import { UserTaskExecutor } from "../../src/engine/executors/UserTaskExecutor.js";
+import { DecisionNodeExecutor } from "../../src/engine/executors/DecisionNodeExecutor.js";
+import { edgeResolver } from "../../src/engine/EdgeResolver.js";
 import { executionEngine } from "../../src/engine/ExecutionEngine.js";
 import { TaskStatuses, InstanceStatuses, NodeTypes } from "../../src/types/enums.js";
 import { StateTransitionError } from "../../src/errors/StateTransitionError.js";
@@ -25,6 +27,7 @@ jest.mock("../../src/repositories/task.repository.js");
 jest.mock("../../src/repositories/taskExecution.repository.js");
 jest.mock("../../src/repositories/node.repository.js");
 jest.mock("../../src/repositories/edge.repository.js");
+jest.mock("../../src/engine/EdgeResolver.js");
 jest.mock("../../src/engine/executors/StartNodeExecutor.js", () => ({
   StartNodeExecutor: jest.fn().mockImplementation(function (this: any) {
     this.execute = jest.fn();
@@ -37,6 +40,11 @@ jest.mock("../../src/engine/executors/EndNodeExecutor.js", () => ({
 }));
 jest.mock("../../src/engine/executors/UserTaskExecutor.js", () => ({
   UserTaskExecutor: jest.fn().mockImplementation(function (this: any) {
+    this.execute = jest.fn();
+  }),
+}));
+jest.mock("../../src/engine/executors/DecisionNodeExecutor.js", () => ({
+  DecisionNodeExecutor: jest.fn().mockImplementation(function (this: any) {
     this.execute = jest.fn();
   }),
 }));
@@ -81,6 +89,7 @@ const startNode: NodeModel = { ...baseNodeProps, id: "node-start", client_id: "c
 const endNode: NodeModel = { ...baseNodeProps, id: "node-end", client_id: "client-end", type: NodeTypes.END };
 const userNode: NodeModel = { ...baseNodeProps, id: "node-user", client_id: "client-user", type: "user" };
 const serviceNode: NodeModel = { ...baseNodeProps, id: "node-service", client_id: "client-service", type: "service" };
+const decisionNode: NodeModel = { ...baseNodeProps, id: "node-decision", client_id: "client-decision", type: NodeTypes.DECISION, configuration: { rules: [] } };
 
 const baseEdgeProps = {
   name: null,
@@ -105,6 +114,7 @@ const edgeStartToEnd: EdgeModel = {
 const mockTask1: TaskModel = { id: "task-1", instance_id: "inst-1", node_id: "node-start", status: "in_progress", created_on: new Date() };
 const mockTask2: TaskModel = { id: "task-2", instance_id: "inst-1", node_id: "node-end", status: "in_progress", created_on: new Date() };
 const mockTaskUser: TaskModel = { id: "task-user", instance_id: "inst-1", node_id: "node-user", status: "in_progress", created_on: new Date() };
+const mockTaskDecision: TaskModel = { id: "task-decision", instance_id: "inst-1", node_id: "node-decision", status: "in_progress", created_on: new Date() };
 
 const mockTaskExec1: TaskExecutionModel = {
   id: "texec-1", task_id: "task-1", status: "in_progress",
@@ -113,6 +123,7 @@ const mockTaskExec1: TaskExecutionModel = {
 };
 const mockTaskExec2: TaskExecutionModel = { ...mockTaskExec1, id: "texec-2", task_id: "task-2" };
 const mockTaskExecUser: TaskExecutionModel = { ...mockTaskExec1, id: "texec-user", task_id: "task-user" };
+const mockTaskExecDecision: TaskExecutionModel = { ...mockTaskExec1, id: "texec-decision", task_id: "task-decision" };
 
 const mockInstanceWithVars: InstanceModel = { ...mockInstance, current_variables: { global: { amount: 500 } } };
 const mockCompletedInstance: InstanceModel = { ...mockInstance, status: "completed" };
@@ -129,15 +140,31 @@ const completedEndResult = {
   outputVariables: { result: 500 },
 };
 
+const completedDecisionResult = {
+  status: TaskStatuses.COMPLETED,
+  outputVariables: {},
+};
+
+const allNodes = [startNode, endNode, userNode, decisionNode];
+
 let startExecMock: jest.Mock;
 let endExecMock: jest.Mock;
 let userExecMock: jest.Mock;
+let decisionExecMock: jest.Mock;
 
 beforeAll(() => {
   startExecMock = (jest.mocked(StartNodeExecutor).mock.instances[0] as any).execute;
   endExecMock = (jest.mocked(EndNodeExecutor).mock.instances[0] as any).execute;
   userExecMock = (jest.mocked(UserTaskExecutor).mock.instances[0] as any).execute;
+  decisionExecMock = (jest.mocked(DecisionNodeExecutor).mock.instances[0] as any).execute;
 });
+
+/** Helper: set up mocks for the "next" path (non-end, non-failed, completed node) */
+function mockNextPath(edges: EdgeModel[], nextNodeIds: string[]) {
+  jest.mocked(edgeRepository.findBySourceNodeId).mockResolvedValueOnce(edges);
+  jest.mocked(nodeRepository.findByWorkflowVersionId).mockResolvedValueOnce(allNodes);
+  jest.mocked(edgeResolver.resolveNextNodeIds).mockResolvedValueOnce(nextNodeIds);
+}
 
 describe("ExecutionEngine", () => {
   describe("runNode()", () => {
@@ -147,7 +174,7 @@ describe("ExecutionEngine", () => {
       jest.mocked(taskExecutionRepository.insert).mockResolvedValueOnce(mockTaskExec1);
       startExecMock.mockResolvedValueOnce(completedStartResult);
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
-      jest.mocked(edgeRepository.findBySourceNodeId).mockResolvedValueOnce([edgeStartToEnd]);
+      mockNextPath([edgeStartToEnd], ["node-end"]);
 
       const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
       expect(result.outcome).toBe("next");
@@ -236,7 +263,7 @@ describe("ExecutionEngine", () => {
       jest.mocked(instanceRepository.updateById)
         .mockResolvedValueOnce(mockInstanceWithVars)
         .mockResolvedValueOnce(mockFailedInstance);
-      jest.mocked(edgeRepository.findBySourceNodeId).mockResolvedValueOnce([]);
+      mockNextPath([], []);
 
       const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
       expect(result.outcome).toBe("failed");
@@ -260,7 +287,7 @@ describe("ExecutionEngine", () => {
       jest.mocked(taskExecutionRepository.insert).mockResolvedValueOnce(mockTaskExecUser);
       userExecMock.mockResolvedValueOnce({ status: TaskStatuses.COMPLETED, outputVariables: { newVar: 42 } });
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
-      jest.mocked(edgeRepository.findBySourceNodeId).mockResolvedValueOnce([edgeStartToEnd]);
+      mockNextPath([edgeStartToEnd], ["node-end"]);
 
       const result = await executionEngine.runNode(mockInstance, "node-user", incomingContext);
       expect(result.outcome).toBe("next");
@@ -275,7 +302,7 @@ describe("ExecutionEngine", () => {
       jest.mocked(taskExecutionRepository.insert).mockResolvedValueOnce(mockTaskExec1);
       startExecMock.mockResolvedValueOnce(completedStartResult);
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
-      jest.mocked(edgeRepository.findBySourceNodeId).mockResolvedValueOnce([edgeStartToEnd]);
+      mockNextPath([edgeStartToEnd], ["node-end"]);
 
       await executionEngine.runNode(mockInstance, "node-start", emptyContext);
       expect(jest.mocked(taskRepository.insert)).toHaveBeenCalledTimes(1);
@@ -287,7 +314,7 @@ describe("ExecutionEngine", () => {
       jest.mocked(taskExecutionRepository.insert).mockResolvedValueOnce(mockTaskExec1);
       startExecMock.mockResolvedValueOnce(completedStartResult);
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
-      jest.mocked(edgeRepository.findBySourceNodeId).mockResolvedValueOnce([edgeStartToEnd]);
+      mockNextPath([edgeStartToEnd], ["node-end"]);
 
       await executionEngine.runNode(mockInstance, "node-start", emptyContext);
       expect(jest.mocked(taskExecutionRepository.insert)).toHaveBeenCalledTimes(1);
@@ -299,12 +326,31 @@ describe("ExecutionEngine", () => {
       jest.mocked(taskExecutionRepository.insert).mockResolvedValueOnce(mockTaskExec1);
       startExecMock.mockResolvedValueOnce(completedStartResult);
       jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
-      jest.mocked(edgeRepository.findBySourceNodeId).mockResolvedValueOnce([edgeStartToEnd]);
+      mockNextPath([edgeStartToEnd], ["node-end"]);
 
       const result = await executionEngine.runNode(mockInstance, "node-start", emptyContext);
       expect(result.outcome).toBe("next");
       if (result.outcome === "next") {
         expect(result.context.global).toMatchObject({ constants: { amount: 500 } });
+      }
+    });
+
+    it("decision node COMPLETED → delegates to edgeResolver for next nodes", async () => {
+      decisionExecMock.mockResolvedValueOnce(completedDecisionResult);
+
+      jest.mocked(nodeRepository.findById).mockResolvedValueOnce(decisionNode);
+      jest.mocked(taskRepository.insert).mockResolvedValueOnce(mockTaskDecision);
+      jest.mocked(taskExecutionRepository.insert).mockResolvedValueOnce(mockTaskExecDecision);
+      jest.mocked(instanceRepository.updateById).mockResolvedValueOnce(mockInstanceWithVars);
+      mockNextPath([], ["node-end"]);
+
+      const ctx: WorkflowContext = { global: { amount: 500 } };
+      const result = await executionEngine.runNode(mockInstance, "node-decision", ctx);
+
+      expect(result.outcome).toBe("next");
+      expect(jest.mocked(edgeResolver.resolveNextNodeIds)).toHaveBeenCalled();
+      if (result.outcome === "next") {
+        expect(result.nextNodeIds).toContain("node-end");
       }
     });
   });

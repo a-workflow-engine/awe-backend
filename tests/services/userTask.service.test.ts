@@ -88,7 +88,7 @@ describe("resumeUserTask", () => {
   beforeEach(() => {
     jest.mocked(contextManager.fromJson).mockReturnValue(emptyContext);
     jest.mocked(contextManager.merge).mockReturnValue(emptyContext);
-    jest.mocked(edgeResolver.resolveNextNodeIds).mockReturnValue(["node-end"]);
+    jest.mocked(edgeResolver.resolveNextNodeIds).mockResolvedValue(["node-end"]);
     jest.mocked(edgeRepository.findByNodeIds).mockResolvedValue([]);
     jest.mocked(queueService.enqueue).mockResolvedValue(undefined);
     jest.mocked(taskRepository.updateById).mockResolvedValue(mockTask);

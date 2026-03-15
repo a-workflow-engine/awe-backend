@@ -14,7 +14,9 @@ export class DecisionNodeExecutor extends BaseExecutor {
     _context: WorkflowContext,
     _transaction: Transaction<DB>,
   ): Promise<ExecutorResult> {
-    const parsed = DecisionNodeConfigurationSchema.safeParse(node.configuration);
+    const parsed = DecisionNodeConfigurationSchema.safeParse(
+      node.configuration,
+    );
     if (!parsed.data) {
       throw new DataIntegrityError(
         `Decision node configuration is invalid node id=${node.id}`,

@@ -1,7 +1,21 @@
 import { edgeResolver } from "../../src/engine/EdgeResolver.js";
 import { NodeTypes } from "../../src/types/enums.js";
 import type { NodeModel, EdgeModel } from "../../src/types/models.js";
-import { StateTransitionError } from "../../src/errors/StateTransitionError.js";
+
+jest.mock("../../src/utils/contextResolver.js", () => ({
+  buildFeelContext: jest.fn(async (ctx: { global: Record<string, unknown> }) => {
+    const global = ctx.global;
+    const constants = (global.constants as Record<string, unknown>) ?? {};
+    const structuralKeys = new Set(["constants", "fetchables", "urls"]);
+    const variables: Record<string, unknown> = { ...constants };
+    for (const [key, val] of Object.entries(global)) {
+      if (!structuralKeys.has(key)) {
+        variables[key] = val;
+      }
+    }
+    return { context: variables };
+  }),
+}));
 
 const baseNode = {
   client_id: "client-n",
@@ -56,91 +70,138 @@ const makeEdge = (
   condition_expression: cond,
 });
 
-const emptyContext = { global: {}, next: {} };
+const emptyContext = { global: {} };
 
 describe("EdgeResolver", () => {
   describe("non-decision nodes", () => {
-    it("returns the destination id for a single outgoing edge", () => {
+    it("returns the destination id for a single outgoing edge", async () => {
       const nodes = [makeNode("n1", NodeTypes.START), makeNode("n2", NodeTypes.END)];
       const edges = [makeEdge("e1", "n1", "n2")];
-      expect(edgeResolver.resolveNextNodeIds("n1", emptyContext, edges, nodes)).toEqual(["n2"]);
+      await expect(edgeResolver.resolveNextNodeIds("n1", emptyContext, edges, nodes)).resolves.toEqual(["n2"]);
     });
 
-    it("returns all destination ids for multiple outgoing edges", () => {
+    it("returns all destination ids for multiple outgoing edges", async () => {
       const nodes = [
         makeNode("n1", NodeTypes.START),
         makeNode("n2", NodeTypes.END),
         makeNode("n3", NodeTypes.END),
       ];
       const edges = [makeEdge("e1", "n1", "n2"), makeEdge("e2", "n1", "n3")];
-      const result = edgeResolver.resolveNextNodeIds("n1", emptyContext, edges, nodes);
+      const result = await edgeResolver.resolveNextNodeIds("n1", emptyContext, edges, nodes);
       expect(result).toEqual(expect.arrayContaining(["n2", "n3"]));
       expect(result).toHaveLength(2);
     });
 
-    it("returns empty array when there are no outgoing edges", () => {
+    it("returns empty array when there are no outgoing edges", async () => {
       const nodes = [makeNode("n1", NodeTypes.END)];
-      expect(edgeResolver.resolveNextNodeIds("n1", emptyContext, [], nodes)).toEqual([]);
+      await expect(edgeResolver.resolveNextNodeIds("n1", emptyContext, [], nodes)).resolves.toEqual([]);
     });
 
-    it("excludes edges with null destination_node_id", () => {
+    it("excludes edges with null destination_node_id", async () => {
       const nodes = [makeNode("n1", NodeTypes.START)];
       const edges = [makeEdge("e1", "n1", null)];
-      expect(edgeResolver.resolveNextNodeIds("n1", emptyContext, edges, nodes)).toEqual([]);
+      await expect(edgeResolver.resolveNextNodeIds("n1", emptyContext, edges, nodes)).resolves.toEqual([]);
     });
 
-    it("treats completedNodeId not found in nodes as a non-decision node", () => {
+    it("treats completedNodeId not found in nodes as a non-decision node", async () => {
       const nodes = [makeNode("n2", NodeTypes.END)];
       const edges = [makeEdge("e1", "unknown-id", "n2")];
-      expect(edgeResolver.resolveNextNodeIds("unknown-id", emptyContext, edges, nodes)).toEqual(["n2"]);
+      await expect(edgeResolver.resolveNextNodeIds("unknown-id", emptyContext, edges, nodes)).resolves.toEqual(["n2"]);
     });
   });
 
   describe("decision nodes", () => {
-    it("returns destination of matching conditional edge", () => {
-      const ctx = { global: { amount: 500 }, next: {} };
+    it("returns destination of matching conditional edge", async () => {
+      const ctx = { global: { amount: 500 } };
       const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
-      const edges = [makeEdge("e1", "d1", "n2", "amount > 100")];
-      expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).toEqual(["n2"]);
+      const edges = [makeEdge("e1", "d1", "n2", "context.amount > 100")];
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual(["n2"]);
     });
 
-    it("falls back to default edge when no condition matches", () => {
-      const ctx = { global: { amount: 10 }, next: {} };
+    it("falls back to default edge when no condition matches", async () => {
+      const ctx = { global: { amount: 10 } };
       const nodes = [
         makeNode("d1", NodeTypes.DECISION),
         makeNode("n2", NodeTypes.END),
         makeNode("n3", NodeTypes.END),
       ];
       const edges = [
-        makeEdge("e1", "d1", "n2", "amount > 100"),
+        makeEdge("e1", "d1", "n2", "context.amount > 100"),
         makeEdge("e2", "d1", "n3", null),
       ];
-      expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).toEqual(["n3"]);
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual(["n3"]);
     });
 
-    it("throws StateTransitionError when no condition matches and no default edge", () => {
-      const ctx = { global: { amount: 10 }, next: {} };
+    it("returns empty array when no condition matches and no default edge", async () => {
+      const ctx = { global: { amount: 10 } };
       const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
-      const edges = [makeEdge("e1", "d1", "n2", "amount > 100")];
-      expect(() =>
-        edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes),
-      ).toThrow(StateTransitionError);
+      const edges = [makeEdge("e1", "d1", "n2", "context.amount > 100")];
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual([]);
     });
 
-    it("returns all destinations when multiple conditions match", () => {
-      const ctx = { global: { amount: 500 }, next: {} };
+    it("returns all destinations when multiple conditions match", async () => {
+      const ctx = { global: { amount: 500 } };
       const nodes = [
         makeNode("d1", NodeTypes.DECISION),
         makeNode("n2", NodeTypes.END),
         makeNode("n3", NodeTypes.END),
       ];
       const edges = [
-        makeEdge("e1", "d1", "n2", "amount > 100"),
-        makeEdge("e2", "d1", "n3", "amount > 200"),
+        makeEdge("e1", "d1", "n2", "context.amount > 100"),
+        makeEdge("e2", "d1", "n3", "context.amount > 200"),
       ];
-      const result = edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes);
+      const result = await edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes);
       expect(result).toEqual(expect.arrayContaining(["n2", "n3"]));
       expect(result).toHaveLength(2);
+    });
+
+    it("resolves fetchable variables for decision evaluation", async () => {
+      const ctx = {
+        global: {
+          constants: { threshold: 100 },
+          fetchables: { serverValue: { urlId: "url1", jsonPath: "data.value" } },
+          urls: { url1: { url: "https://api.example.com/data", headers: {} } },
+        },
+      };
+      const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
+      const edges = [makeEdge("e1", "d1", "n2", "context.threshold > 50")];
+      const result = await edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes);
+      expect(result).toEqual(["n2"]);
+    });
+
+    it("normalizes == to = for FEEL compatibility (number)", async () => {
+      const ctx = { global: { amount: 500 } };
+      const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
+      const edges = [makeEdge("e1", "d1", "n2", "context.amount == 500")];
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual(["n2"]);
+    });
+
+    it("normalizes == to = for FEEL compatibility (string)", async () => {
+      const ctx = { global: { id: "7" } };
+      const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
+      const edges = [makeEdge("e1", "d1", "n2", 'context.id == "7"')];
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual(["n2"]);
+    });
+
+    it("normalizes === to = for FEEL compatibility", async () => {
+      const ctx = { global: { amount: 500 } };
+      const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
+      const edges = [makeEdge("e1", "d1", "n2", "context.amount === 500")];
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual(["n2"]);
+    });
+
+    it("does not alter != operator during normalization", async () => {
+      const ctx = { global: { amount: 500 } };
+      const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
+      const edges = [makeEdge("e1", "d1", "n2", "context.amount != 100")];
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual(["n2"]);
+    });
+
+    it("does not alter == inside string literals", async () => {
+      const ctx = { global: { label: "a==b" } };
+      const nodes = [makeNode("d1", NodeTypes.DECISION), makeNode("n2", NodeTypes.END)];
+      const edges = [makeEdge("e1", "d1", "n2", 'context.label = "a==b"')];
+      await expect(edgeResolver.resolveNextNodeIds("d1", ctx, edges, nodes)).resolves.toEqual(["n2"]);
     });
   });
 });

@@ -131,6 +131,6 @@ const ctx = { global: { amount: 500 } };
     const node = makeNode({ success: true, resultMap: [], message: "Workflow completed successfully!" });
     const result = await executor.execute(mockInstance, node, { global: {} }, tx);
     expect(result.status).toBe(TaskStatuses.COMPLETED);
-    expect(result.outputVariables._message).toBe("Workflow completed successfully!");
+    expect(result.outputVariables.message).toBe("Workflow completed successfully!");
   });
 });

@@ -1,10 +1,17 @@
 import { fetchService } from "../services/fetch.service.js";
 import type { WorkflowContext } from "../engine/types.js";
 import { executionLogger } from "./executionLogger.js";
+import { FeelDataType } from "../types/enums.js";
 
 export type FetchableUrlConfig = {
   url: string;
   headers: Record<string, string>;
+};
+
+export type FetchableDescriptor = {
+  urlId: string;
+  jsonPath: string;
+  dataType?: string;
 };
 
 function getByPath(data: unknown, path: string): unknown {
@@ -15,6 +22,37 @@ function getByPath(data: unknown, path: string): unknown {
   }, data);
 }
 
+/**
+ * Coerces a raw value (typically from a JSON HTTP response) to the FEEL type
+ * declared in the workflow's inputDataMap.  Without this step a JSON string
+ * like `"7"` cannot be compared to a number literal in a FEEL expression
+ * because FEEL equality (`==`) does not perform type coercion.
+ */
+function coerceToDataType(
+  value: unknown,
+  dataType: string | undefined,
+): unknown {
+  if (value === null || value === undefined || dataType === undefined) {
+    return value;
+  }
+
+  switch (dataType) {
+    case FeelDataType.NUMBER: {
+      const num = Number(value);
+      return Number.isNaN(num) ? value : num;
+    }
+    case FeelDataType.STRING:
+      return String(value);
+    case FeelDataType.BOOLEAN: {
+      if (typeof value === "boolean") return value;
+      if (value === "true") return true;
+      if (value === "false") return false;
+      return value;
+    }
+    default:
+      return value;
+  }
+}
 
 export async function buildFeelContext(
   context: WorkflowContext,
@@ -23,13 +61,8 @@ export async function buildFeelContext(
 
   const constants = (global.constants as Record<string, unknown>) ?? {};
   const fetchables =
-    (global.fetchables as Record<
-      string,
-      { urlId: string; jsonPath: string }
-    >) ?? {};
-  const urls =
-    (global.urls as Record<string, FetchableUrlConfig>) ?? {};
-
+    (global.fetchables as Record<string, FetchableDescriptor>) ?? {};
+  const urls = (global.urls as Record<string, FetchableUrlConfig>) ?? {};
 
   const variables: Record<string, unknown> = { ...constants };
 
@@ -40,9 +73,10 @@ export async function buildFeelContext(
     }
   }
 
-
   const fetchedResponses: Record<string, unknown> = {};
-  for (const [varName, { urlId, jsonPath }] of Object.entries(fetchables)) {
+  for (const [varName, { urlId, jsonPath, dataType }] of Object.entries(
+    fetchables,
+  )) {
     const urlConfig = urls[urlId];
     if (!urlConfig) continue;
 
@@ -53,30 +87,35 @@ export async function buildFeelContext(
       );
     }
 
-    variables[varName] = getByPath(fetchedResponses[urlId], jsonPath);
+    const rawValue = getByPath(fetchedResponses[urlId], jsonPath);
+    variables[varName] = coerceToDataType(rawValue, dataType);
 
     executionLogger.fetchableResolved({
       varName,
       urlId,
-      url:      urlConfig.url,
-      headers:  urlConfig.headers,
+      url: urlConfig.url,
+      headers: urlConfig.headers,
       jsonPath,
-      value:    variables[varName],
+      value: variables[varName],
     });
   }
 
-
-  const structuralKeysSet = new Set(["constants", "fetchables", "urls"]);
-  const directVars = Object.entries(constants).map(([name, value]) => ({ name, value }));
+  const directVars = Object.entries(constants).map(([name, value]) => ({
+    name,
+    value,
+  }));
   const mergedVars = Object.entries(global)
-    .filter(([k]) => !structuralKeysSet.has(k))
+    .filter(([k]) => !structuralKeys.has(k))
     .map(([name, value]) => ({ name, value }));
-  const fetchableList = Object.entries(fetchables).map(([name, { urlId }]) => ({ name, urlId }));
+  const fetchableList = Object.entries(fetchables).map(([name, { urlId }]) => ({
+    name,
+    urlId,
+  }));
 
   executionLogger.contextResolution({
-    directVariables:  directVars,
-    mergedVariables:  mergedVars,
-    fetchableVars:    fetchableList,
+    directVariables: directVars,
+    mergedVariables: mergedVars,
+    fetchableVars: fetchableList,
   });
 
   return { context: variables };

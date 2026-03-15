@@ -82,7 +82,7 @@ export const taskRepository = {
 
   findAllPending: async (actorId: string): Promise<TaskDetailItem[]> => {
     try {
-      return await db
+      return (await db
         .selectFrom("task")
         .innerJoin("node", "node.id", "task.node_id")
         .innerJoin("instance", "instance.id", "task.instance_id")
@@ -102,7 +102,7 @@ export const taskRepository = {
         .where("node.type", "=", NodeTypes.USER)
         .where("workflow.created_by", "=", actorId)
         .orderBy("task.created_on", "desc")
-        .execute() as unknown as TaskDetailItem[];
+        .execute()) as unknown as TaskDetailItem[];
     } catch (err) {
       throw new RepositoryError("Find all pending tasks failed", err);
     }
@@ -113,7 +113,7 @@ export const taskRepository = {
     actorId: string,
   ): Promise<TaskDetailItem | undefined> => {
     try {
-      return await db
+      return (await db
         .selectFrom("task")
         .innerJoin("node", "node.id", "task.node_id")
         .innerJoin("instance", "instance.id", "task.instance_id")
@@ -131,7 +131,7 @@ export const taskRepository = {
         ])
         .where("task.id", "=", id)
         .where("workflow.created_by", "=", actorId)
-        .executeTakeFirst() as unknown as TaskDetailItem | undefined;
+        .executeTakeFirst()) as unknown as TaskDetailItem | undefined;
     } catch (err) {
       throw new RepositoryError(
         `Find task by id=${id} with context failed`,
