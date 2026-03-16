@@ -53,26 +53,29 @@ export const instanceRepository = {
   },
 
   findByIdForActor: async (
-    id: string,
-    actorId: string,
-  ): Promise<InstanceModel | undefined> => {
-    try {
-      return await db
-        .selectFrom("instance")
-        .innerJoin(
-          "workflow_version",
-          "workflow_version.id",
-          "instance.workflow_version_id",
-        )
-        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .selectAll("instance")
-        .where("instance.id", "=", id)
-        .where("workflow.created_by", "=", actorId)
-        .executeTakeFirst();
-    } catch (err) {
-      throw new RepositoryError(`Find instance by id=${id} failed`, err);
-    }
-  },
+  id: string,
+  actorId: string,
+): Promise<InstanceModel | undefined> => {
+  try {
+    return await db
+      .selectFrom("instance")
+      .innerJoin(
+        "workflow_version",
+        "workflow_version.id",
+        "instance.workflow_version_id",
+      )
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .selectAll("instance")
+      .select((eb) => [
+        eb.ref("workflow_version.version").as("version_number"),
+      ])
+      .where("instance.id", "=", id)
+      .where("workflow.created_by", "=", actorId)
+      .executeTakeFirst();
+  } catch (err) {
+    throw new RepositoryError(`Find instance by id=${id} failed`, err);
+  }
+},
 
   insert: async (data: NewInstance, transaction?: Transaction<DB>) => {
     try {
