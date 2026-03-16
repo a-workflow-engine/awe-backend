@@ -18,10 +18,11 @@ const mockTask: TaskDetailItem = {
 
 describe("taskService", () => {
   describe("getTask()", () => {
-    it("returns the task with resolved display data when repository resolves with a task", async () => {
+    it("returns the task without instance_context when repository resolves with a task", async () => {
       jest.mocked(taskRepository.findByIdWithContext).mockResolvedValueOnce(mockTask);
       const result = await taskService.getTask("task-uuid-1", "actor-1");
-      expect(result).toEqual({ ...mockTask, resolvedDisplayData: {} });
+      const { instance_context: _, ...expected } = mockTask;
+      expect(result).toEqual(expected);
     });
 
     it("returns undefined when repository resolves with undefined", async () => {
