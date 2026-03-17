@@ -1,15 +1,26 @@
 import type { Request, Response } from "express";
+import { taskService } from "../services/task.service.js";
 import { resumeUserTask } from "../services/userTask.service.js";
+import { TaskParamsSchema, TaskCompleteSchema } from "../schemas/task.schema.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
 
-export async function resumeTask(req: Request, res: Response) {
-  try {
-    const { taskId, input } = req.body;
-    const context = req.body.context;
+export const taskController = {
+  list: async (req: Request, res: Response) => {
+    const tasks = await taskService.listPending(req.actor.id);
+    return res.json({ tasks });
+  },
 
-    const result = await resumeUserTask(taskId, input, context);
+  getTask: async (req: Request, res: Response) => {
+    const { taskId } = TaskParamsSchema.parse(req.params);
+    const task = await taskService.getTask(taskId, req.actor.id);
+    if (!task) throw new NotFoundError("Task");
+    return res.json({ task });
+  },
 
-    res.json(result);
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-}
+  completeUserTask: async (req: Request, res: Response) => {
+    const { taskId } = TaskParamsSchema.parse(req.params);
+    const { userInput } = TaskCompleteSchema.parse(req.body);
+    await resumeUserTask(taskId, userInput, req.actor.id);
+    return res.json({});
+  },
+};

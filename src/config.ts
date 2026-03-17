@@ -8,6 +8,10 @@ const Config = {
   JWT_ACCESS_EXPIRES_MINS: process.env.JWT_ACCESS_EXPIRES_MINS,
   JWT_REFRESH_EXPIRES_DAYS: process.env.JWT_REFRESH_EXPIRES_DAYS,
   API_KEY_PREFIX: process.env.API_KEY_PREFIX,
+  REDIS_HOST: process.env.REDIS_HOST,
+  REDIS_PORT: process.env.REDIS_PORT,
+  REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+  EXECUTION_QUEUE_NAME: process.env.EXECUTION_QUEUE_NAME,
 };
 
 function validateConfig(config: Record<string, string | undefined>) {

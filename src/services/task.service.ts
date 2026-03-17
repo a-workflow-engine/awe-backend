@@ -1,113 +1,185 @@
-import type { Transaction } from "kysely";
-import type { InstanceModel, TaskExecutionModel } from "../types/models";
-import type { DB, TaskStatus } from "../types/database";
-import { taskRepository } from "../repositories/task.repository";
-import { TaskStatuses } from "../types/enums";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository";
-import { nodeService } from "./node.services.js";
-import { StartNodeConfigurationSchema } from "../schemas/node.schema.js";
+import {
+  taskRepository,
+  type TaskDetailItem,
+} from "../repositories/task.repository.js";
+import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
+import type { DB, TaskStatus } from "../types/database.js";
+import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
+import { nodeRepository } from "../repositories/node.repository.js";
+import { instanceRepository } from "../repositories/instance.repository.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
+import type { Transaction } from "kysely";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { converterUtils } from "../utils/converter.utils";
+import { buildFeelContext } from "../utils/contextResolver.js";
+import { converterUtils } from "../utils/converter.utils.js";
+import type { ContextVariables } from "../types/engine.js";
 
-interface StartTaskOutputVariables {
-  constants: Record<string, unknown>;
-  fetchables: Record<string, { urlId: string; jsonPath: string }>;
-  urls: Record<string, string>;
+export interface ResolvedTask {
+  id: string;
+  instance_id: string;
+  node_id: string;
+  status: string;
+  created_on: string;
+  workflow_name: string;
+  node_configuration: {
+    title?: string;
+    description?: string;
+    assignee?: string;
+    requestMap: Array<{ label: string; value: unknown }>;
+    responseMap: unknown[];
+  };
+}
+
+async function resolveTask(
+  task: TaskDetailItem,
+  fetch: boolean,
+): Promise<ResolvedTask> {
+  const parsed = UserNodeConfigurationSchema.safeParse(task.node_configuration);
+  if (!parsed.success) {
+    throw new DataIntegrityError(
+      `Node id=${task.node_id} has an invalid configuration`,
+    );
+  }
+
+  const configuration = parsed.data;
+
+  const instance = await instanceRepository.findById(task.instance_id);
+  if (!instance) {
+    throw new DataIntegrityError(
+      `No instance referenced to node id=${task.node_id}`,
+    );
+  }
+
+  if (!fetch) {
+    const { instance_context: _, ...rest } = task;
+
+    return {
+      ...rest,
+      node_configuration: {
+        title: configuration.title,
+        description: configuration.description,
+        assignee: null,
+        requestMap: {},
+        responseMap: configuration.responseMap,
+      },
+    } as unknown as ResolvedTask;
+  }
+
+  const context = await buildFeelContext(
+    converterUtils.jsonValueToObject(
+      instance.current_variables,
+    ) as ContextVariables,
+  );
+
+  let resolvedAssignee: unknown;
+
+  if (configuration.assignee) {
+    const result = evaluate(configuration.assignee, context);
+    if (result.warnings.length > 0) {
+      throw new DataIntegrityError(
+        `FEEL evaluation failed for expression "${configuration.assignee}"`,
+      );
+    }
+
+    resolvedAssignee = result.value;
+  }
+
+  const resolvedRequestMap = configuration.requestMap.map((field) => {
+    const result = evaluate(field.valueExpression, context);
+    if (result.warnings.length > 0) {
+      throw new DataIntegrityError(
+        `FEEL evaluation failed for expression "${configuration.assignee}"`,
+      );
+    }
+
+    return { label: field.label, value: result.value };
+  });
+
+  const { instance_context: _, ...rest } = task;
+
+  return {
+    ...rest,
+    node_configuration: {
+      title: configuration.title,
+      description: configuration.description,
+      assignee: resolvedAssignee,
+      requestMap: resolvedRequestMap,
+      responseMap: configuration.responseMap,
+    },
+  } as unknown as ResolvedTask;
 }
 
 export const taskService = {
-  executeStartNode: async (
-    instance: InstanceModel,
-    transaction?: Transaction<DB>,
-  ): Promise<TaskExecutionModel> => {
-    const startedOn = new Date();
+  listPending: async (actorId: string): Promise<ResolvedTask[]> => {
+    const tasks = await taskRepository.findAllPending(actorId);
+    return Promise.all(
+      tasks.map(async (t) => {
+        return await resolveTask(t, false);
+      }),
+    );
+  },
 
-    const startNode =
-      await nodeService.getByStartNodeByWorkflowVersionIdOrThrow(
-        instance.workflow_version_id,
-      );
-
-    let outputVariables: StartTaskOutputVariables = {
-      constants: {},
-      fetchables: {},
-      urls: {},
-    };
-
-    let status: TaskStatus = TaskStatuses.IN_PROGRESS;
-
-    try {
-      const parsedResult = StartNodeConfigurationSchema.safeParse(
-        startNode.configuration,
-      );
-      if (!parsedResult.data) {
-        throw new DataIntegrityError(
-          `Start node configuration is invalid node id=${startNode.id}`,
-        );
-      }
-
-      const configuration = parsedResult.data;
-      const instanceInputVariables = converterUtils.jsonValueToObject(
-        instance.input_variables,
-      );
-
-      configuration.inputDataMap.forEach((dataMap) => {
-        if (dataMap.fetchableId) {
-          outputVariables.fetchables[dataMap.contextVariableName] = {
-            urlId: dataMap.fetchableId,
-            jsonPath: dataMap.jsonPath,
-          };
-
-          return;
-        }
-
-        outputVariables.constants[dataMap.contextVariableName] =
-          instanceInputVariables[dataMap.jsonPath];
-      });
-
-      configuration.fetchables.forEach((f) => {
-        const result = evaluate(f.urlExpression, outputVariables.constants);
-        if (result.warnings.length > 0 || typeof result.value !== "string") {
-          console.log(typeof result.value);
-          console.error(result.warnings);
-          throw new DataIntegrityError(
-            `Invalid FEEL expression exists in configuration of start node fetchables nodeId=${startNode.id} and versionId=${instance.workflow_version_id}`,
-          );
-        }
-
-        outputVariables.urls[f.id] = result.value;
-      });
-
-      status = TaskStatuses.COMPLETED;
-    } catch (err) {
-      console.error(err);
-      status = TaskStatuses.FAILED;
-
-      if (err instanceof DataIntegrityError) {
-        throw err;
-      }
-    } finally {
-      const task = await taskRepository.insert(
-        {
-          instance_id: instance.id,
-          status: status,
-          node_id: startNode.id,
-        },
-        transaction,
-      );
-      const taskExecution = await taskExecutionRepository.insert(
-        {
-          status: status,
-          task_id: task.id,
-          started_on: startedOn,
-          ended_on: new Date(),
-          input_variables: instance.input_variables,
-          output_variables: converterUtils.objectToJsonValue(outputVariables),
-        },
-        transaction,
-      );
-
-      return taskExecution;
+  getTask: async (
+    taskId: string,
+    actorId: string,
+  ): Promise<ResolvedTask | undefined> => {
+    const task = await taskRepository.findByIdWithContext(taskId, actorId);
+    if (!task) {
+      return undefined;
     }
+    return await resolveTask(task, true);
+  },
+
+  getAllTaskDetails: async (
+    taskId: string,
+  ): Promise<{ instance: InstanceModel; node: NodeModel; task: TaskModel }> => {
+    const task = await taskRepository.findById(taskId);
+    if (!task) {
+      throw new NotFoundError("task");
+    }
+
+    const [instance, node] = await Promise.all([
+      instanceRepository.findById(task.instance_id),
+      nodeRepository.findById(task.node_id),
+    ]);
+
+    if (!instance) {
+      throw new NotFoundError("instance");
+    }
+    if (!node) {
+      throw new NotFoundError("node");
+    }
+
+    return { instance, node, task };
+  },
+
+  createNew: async (
+    instanceId: string,
+    nodeId: string,
+    status: TaskStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    return taskRepository.insert(
+      {
+        instance_id: instanceId,
+        node_id: nodeId,
+        status,
+      },
+      transaction,
+    );
+  },
+  updateStatus: async (
+    taskId: string,
+    status: TaskStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    return taskRepository.updateById(
+      taskId,
+      {
+        status,
+      },
+      transaction,
+    );
   },
 };

@@ -5,3 +5,7 @@ export const InstanceCreateSchema = z.object({
   context: z.record(z.string(), z.unknown()).optional().default({}),
   autoAdvance: z.boolean().optional().default(true),
 });
+
+export const InstanceParamsSchema = z.object({
+  instanceId: z.uuid(),
+});

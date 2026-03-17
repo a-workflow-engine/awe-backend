@@ -59,8 +59,6 @@ const findNodesByEdgeModel = (
   }
 
   if (!source) {
-    console.log(nodes);
-    console.log(edge);
     throw new DataIntegrityError("source cannot be null");
   }
 
@@ -175,5 +173,16 @@ export const edgeService = {
     if (nodes.length === 0) return;
     const ids = nodes.map((node) => node.id);
     await edgeRepository.deleteByNodeIds(ids, transaction);
+  },
+
+  getNextNodeIdsBySourceNodeId: async (
+    nodeId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<string[]> => {
+    const edges = await edgeRepository.findBySourceNodeId(nodeId, transaction);
+
+    return edges
+      .map((edge) => edge.destination_node_id)
+      .filter((id): id is string => id !== null);
   },
 };

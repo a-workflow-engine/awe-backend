@@ -469,12 +469,15 @@ export interface ExtensionsPgStatStatementsInfo {
 }
 
 export interface Instance {
+  auto_advance: Generated<boolean>;
   created_by: string;
   created_on: Generated<Timestamp>;
+  current_node_id: string | null;
   current_variables: Json | null;
   ended_on: Timestamp | null;
   id: Generated<string>;
   input_variables: Json | null;
+  is_deleted: Generated<boolean>;
   output_variables: Json | null;
   started_on: Timestamp | null;
   status: InstanceStatus;
@@ -745,7 +748,7 @@ export interface WorkflowVersion {
   modified_on: Generated<Timestamp>;
   published_on: Timestamp | null;
   status: WorkflowVersionStatus;
-  version: Generated<number>;
+  version: number;
   workflow_id: string;
 }
 

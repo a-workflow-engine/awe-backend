@@ -1,6 +1,9 @@
 import { Router } from "express";
-import type { resumeTask } from "../controllers/task.controller.js";
+import { taskController } from "../controllers/task.controller.js";
+import { authenticateRequest } from "../middlewares/auth.middleware.js";
 
 export const taskRouter = Router();
 
-// taskRouter.post("/");
+taskRouter.get("/", authenticateRequest, taskController.list);
+taskRouter.get("/:taskId", authenticateRequest, taskController.getTask);
+taskRouter.post("/:taskId/complete", authenticateRequest, taskController.completeUserTask);
