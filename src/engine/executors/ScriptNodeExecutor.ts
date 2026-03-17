@@ -65,7 +65,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     return {
       status: TaskStatuses.COMPLETED,
-      outputVariables: responseBody.output,
+      outputVariables: outputVariables,
       nextNodeId: nextNode ?? null,
     };
   }
