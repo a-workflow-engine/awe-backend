@@ -59,7 +59,10 @@ export class ScriptNodeExecutor extends BaseExecutor {
       },
     );
 
-    const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(node.id);
+    const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(
+      node.id,
+      transaction,
+    );
 
     return {
       status: TaskStatuses.COMPLETED,

@@ -16,13 +16,11 @@ import type {
   ExecutorResult,
   NodeRunResult,
 } from "../types/engine.js";
-import { instanceRepository } from "../repositories/instance.repository.js";
-import { taskRepository } from "../repositories/task.repository.js";
 
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
   [NodeTypes.END]: new EndNodeExecutor(),
-  // [NodeTypes.DECISION]: new DecisionNodeExecutor(),
+  [NodeTypes.DECISION]: new DecisionNodeExecutor(),
   [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
 };
 
@@ -32,15 +30,6 @@ export const executionEngine = {
     node: NodeModel,
     task: TaskModel,
   ): Promise<NodeRunResult> => {
-    const res = await Promise.all([
-      instanceRepository.updateById(instance.id, {
-        status: InstanceStatuses.IN_PROGRESS,
-      }),
-      taskRepository.updateById(task.id, {
-        status: TaskStatuses.IN_PROGRESS,
-      }),
-    ]);
-
     const inputVariablesJson = converterUtils.jsonValueToObject(
       instance.input_variables,
     );
@@ -61,12 +50,6 @@ export const executionEngine = {
       throw new Error(`Executor for node type="${node.type}" not found`);
     }
 
-    const taskExecution = await taskExecutionService.startNew(
-      task.id,
-      TaskStatuses.IN_PROGRESS,
-      inputVariables,
-    );
-
     let result: ExecutorResult = {
       status: TaskStatuses.IN_PROGRESS,
       outputVariables: {},
@@ -74,64 +57,76 @@ export const executionEngine = {
     };
 
     let nodeThrew = false;
+    let currentVariables: ContextVariables | undefined;
 
-    try {
-      result = await executor.execute(node, inputVariables);
-    } catch (err) {
-      console.error(err);
-      nodeThrew = true;
-      let message = "Unknown error";
+    await db.transaction().execute(async (transaction) => {
+      await taskService.updateStatus(
+        task.id,
+        TaskStatuses.IN_PROGRESS,
+        transaction,
+      );
 
-      if (err instanceof Error) {
-        message = err.message;
+      const taskExecution = await taskExecutionService.startNew(
+        task.id,
+        TaskStatuses.IN_PROGRESS,
+        inputVariables,
+        transaction,
+      );
+
+      try {
+        result = await executor.execute(node, inputVariables, transaction);
+      } catch (err) {
+        console.error(err);
+        nodeThrew = true;
+        let message = "Unknown error";
+
+        if (err instanceof Error) {
+          message = err.message;
+        }
+        result = {
+          status: TaskStatuses.FAILED,
+          outputVariables: {},
+          error: message,
+          nextNodeId: null,
+        };
       }
-      result = {
-        status: TaskStatuses.FAILED,
-        outputVariables: {},
-        error: message,
-        nextNodeId: null,
-      };
-    }
 
-    let currentVariables: ContextVariables;
+      if (node.type === NodeTypes.START) {
+        currentVariables = result.outputVariables as ContextVariables;
+      } else if (node.type !== NodeTypes.END) {
+        currentVariables = converterUtils.jsonValueToObject(
+          instance.current_variables,
+        ) as ContextVariables;
+        currentVariables.constants = {
+          ...currentVariables.constants,
+          ...result.outputVariables,
+        };
+      }
 
-    if (node.type === NodeTypes.START) {
-      currentVariables = result.outputVariables as ContextVariables;
-    } else if (node.type !== NodeTypes.END) {
-      currentVariables = converterUtils.jsonValueToObject(
-        instance.current_variables,
-      ) as ContextVariables;
-      currentVariables.constants = {
-        ...currentVariables.constants,
-        ...result.outputVariables,
-      };
-    }
+      let instanceStatus: InstanceStatus;
 
-    let instanceStatus: InstanceStatus;
+      if (nodeThrew) {
+        instanceStatus = InstanceStatuses.FAILED;
+      } else if (
+        result.status === TaskStatuses.IN_PROGRESS &&
+        node.type === NodeTypes.USER
+      ) {
+        instanceStatus = InstanceStatuses.PAUSED;
+      } else if (result.status === TaskStatuses.TERMINATED) {
+        instanceStatus = InstanceStatuses.TERMINATED;
+      } else if (node.type === NodeTypes.END) {
+        instanceStatus = InstanceStatuses.COMPLETED;
+      } else if (
+        result.nextNodeId === null ||
+        result.status === TaskStatuses.FAILED
+      ) {
+        instanceStatus = InstanceStatuses.FAILED;
+      } else {
+        instanceStatus = instance.auto_advance
+          ? InstanceStatuses.IN_PROGRESS
+          : InstanceStatuses.PAUSED;
+      }
 
-    if (nodeThrew) {
-      instanceStatus = InstanceStatuses.FAILED;
-    } else if (
-      result.status === TaskStatuses.IN_PROGRESS &&
-      node.type === NodeTypes.USER
-    ) {
-      instanceStatus = InstanceStatuses.PAUSED;
-    } else if (result.status === TaskStatuses.TERMINATED) {
-      instanceStatus = InstanceStatuses.TERMINATED;
-    } else if (node.type === NodeTypes.END) {
-      instanceStatus = InstanceStatuses.COMPLETED;
-    } else if (
-      result.nextNodeId === null ||
-      result.status === TaskStatuses.FAILED
-    ) {
-      instanceStatus = InstanceStatuses.FAILED;
-    } else {
-      instanceStatus = instance.auto_advance
-        ? InstanceStatuses.IN_PROGRESS
-        : InstanceStatuses.PAUSED;
-    }
-
-    db.transaction().execute(async (transaction) => {
       let instanceUpdate;
       if (node.type === NodeTypes.END && !nodeThrew) {
         instanceUpdate = instanceService.end(
@@ -144,7 +139,7 @@ export const executionEngine = {
         instanceUpdate = instanceService.updateContext(
           instance.id,
           instanceStatus,
-          currentVariables,
+          currentVariables || {},
           result.nextNodeId,
           transaction,
         );
