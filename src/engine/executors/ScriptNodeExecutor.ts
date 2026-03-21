@@ -5,11 +5,11 @@ import { BaseExecutor } from "./BaseExecutor.js";
 import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-import { fetchService } from "../../services/fetch.service.js";
 import { buildFeelContext } from "../../utils/contextResolver.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
+import { JDoodleService } from "../../services/jdoodle.service.js";
 
 export class ScriptNodeExecutor extends BaseExecutor {
   async execute(
@@ -17,6 +17,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
     inputVariables: ContextVariables,
     transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
+
     const parsed = ScriptNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
       throw new DataIntegrityError(
@@ -25,38 +26,57 @@ export class ScriptNodeExecutor extends BaseExecutor {
     }
 
     const configuration = parsed.data;
-    
+
     const currentContext = await buildFeelContext(inputVariables);
+
     const parameters = configuration.parameterMap.map(
-      (parameter) => evaluate(parameter.valueExpression, currentContext).value,
+      (parameter) =>
+        evaluate(parameter.valueExpression, currentContext).value,
     );
 
-    const responseBody = await fetchService.post(
-      "http://localhost:3003/execute",
-      {
-        sourceCode: configuration.sourceCode,
-        entryFunction: configuration.entryFunctionName,
-        parameters: parameters,
-      },
-    );
+    let parsedOutput;
 
-    if (responseBody?.error || !responseBody?.output) {
+    try {
+      const response = await JDoodleService.executeScript(
+        configuration.sourceCode,
+        configuration.entryFunctionName,
+        parameters
+      );
+
+      parsedOutput = response.parsedOutput;
+
+      console.log("RAW:", response.rawOutput);
+      console.log("PARSED:", parsedOutput);
+
+    } catch (error: any) {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
-        error: responseBody?.error,
+        error: error.message,
+        nextNodeId: null,
+      };
+    }
+
+    if (parsedOutput?.error) {
+      return {
+        status: TaskStatuses.FAILED,
+        outputVariables: {},
+        error: parsedOutput.error,
         nextNodeId: null,
       };
     }
 
     let outputVariables: Record<string, unknown> = {};
+
     configuration.responseMap.forEach(
-      ({ jsonPath, type, contextVariable, validationExpression }) => {
-        if (!contextVariable) {
-          return;
-        }
-        outputVariables[contextVariable.name] = responseBody.output[jsonPath];
-      },
+      ({ jsonPath, contextVariable }) => {
+        if (!contextVariable) return;
+
+        outputVariables[contextVariable.name] =
+          typeof parsedOutput === "object"
+            ? parsedOutput?.[jsonPath]
+            : parsedOutput;
+      }
     );
 
     const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(
@@ -66,7 +86,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     return {
       status: TaskStatuses.COMPLETED,
-      outputVariables: outputVariables,
+      outputVariables,
       nextNodeId: nextNode ?? null,
     };
   }
