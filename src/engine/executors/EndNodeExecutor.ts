@@ -6,8 +6,8 @@ import { EndNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { TaskStatuses } from "../../types/enums.js";
-import { buildFeelContext } from "../../utils/contextResolver.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
+import { contextUtils } from "../../utils/context.utils.js";
 
 export class EndNodeExecutor extends BaseExecutor {
   async execute(
@@ -24,10 +24,11 @@ export class EndNodeExecutor extends BaseExecutor {
     const configuration = parsed.data;
     let outputVariables: Record<string, unknown> = {};
 
-    const feelContext = await buildFeelContext(inputVariables);
+    const evaluatedContext =
+      await contextUtils.buildFeelContext(inputVariables);
 
     configuration.resultMap.forEach((rm) => {
-      const result = evaluate(rm.valueExpression, feelContext);
+      const result = evaluate(rm.valueExpression, evaluatedContext);
       if (result.warnings.length > 0) {
         throw new DataIntegrityError(
           `FEEL evaluation failed for expression "${rm.valueExpression}"`,

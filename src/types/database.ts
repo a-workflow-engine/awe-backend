@@ -386,6 +386,32 @@ export interface AuthUsers {
   updated_at: Timestamp | null;
 }
 
+export interface AuthWebauthnChallenges {
+  challenge_type: string;
+  created_at: Generated<Timestamp>;
+  expires_at: Timestamp;
+  id: Generated<string>;
+  session_data: Json;
+  user_id: string | null;
+}
+
+export interface AuthWebauthnCredentials {
+  aaguid: string | null;
+  attestation_type: Generated<string>;
+  backed_up: Generated<boolean>;
+  backup_eligible: Generated<boolean>;
+  created_at: Generated<Timestamp>;
+  credential_id: Buffer;
+  friendly_name: Generated<string>;
+  id: Generated<string>;
+  last_used_at: Timestamp | null;
+  public_key: Buffer;
+  sign_count: Generated<Int8>;
+  transports: Generated<Json>;
+  updated_at: Generated<Timestamp>;
+  user_id: string;
+}
+
 export interface Edge {
   client_id: string;
   condition_expression: string | null;
@@ -699,6 +725,19 @@ export interface TaskTransitionLog {
   transition_type: TaskTransitionType;
 }
 
+export interface UserTaskExecution {
+  assignee: string | null;
+  created_on: Generated<Timestamp>;
+  ended_on: Timestamp | null;
+  id: Generated<string>;
+  request_variables: Json | null;
+  response_variables: Json | null;
+  started_on: Timestamp | null;
+  status: TaskStatus;
+  task_id: string;
+  title: string | null;
+}
+
 export interface VaultDecryptedSecrets {
   created_at: Timestamp | null;
   decrypted_secret: string | null;
@@ -776,6 +815,8 @@ export interface DB {
   "auth.sso_domains": AuthSsoDomains;
   "auth.sso_providers": AuthSsoProviders;
   "auth.users": AuthUsers;
+  "auth.webauthn_challenges": AuthWebauthnChallenges;
+  "auth.webauthn_credentials": AuthWebauthnCredentials;
   edge: Edge;
   environment: Environment;
   "extensions.pg_stat_statements": ExtensionsPgStatStatements;
@@ -800,6 +841,7 @@ export interface DB {
   task: Task;
   task_execution: TaskExecution;
   task_transition_log: TaskTransitionLog;
+  user_task_execution: UserTaskExecution;
   "vault.decrypted_secrets": VaultDecryptedSecrets;
   "vault.secrets": VaultSecrets;
   workflow: Workflow;

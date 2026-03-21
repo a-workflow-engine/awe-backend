@@ -16,6 +16,7 @@ import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { workflowValidatorService } from "./workflowValidator.service.js";
 import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
+import { nodeSchemaService } from "./nodeSchema.service.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 
@@ -50,7 +51,9 @@ export const workflowVersionService = {
     const nodeModels = await nodeService.getByWorkflowVersion(workflowVersion);
     const edgeModels = await edgeService.getByNodes(nodeModels);
 
-    const nodes = nodeModels.map((node) => nodeService.toNodeSchema(node));
+    const nodes = nodeModels.map((node) =>
+      nodeSchemaService.getNodeSchema(node),
+    );
     const edges = edgeModels.map((edge) =>
       edgeService.toEdgeSchema(edge, nodeModels),
     );

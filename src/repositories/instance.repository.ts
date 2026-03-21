@@ -15,7 +15,7 @@ export type InstanceListItem = InstanceModel & {
 export const instanceRepository = {
   findAll: async (actorId: string): Promise<InstanceListItem[]> => {
     try {
-      return await db
+      return (await db
         .selectFrom("instance")
         .innerJoin(
           "workflow_version",
@@ -31,7 +31,7 @@ export const instanceRepository = {
         .where("workflow.created_by", "=", actorId)
         .where("instance.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
-        .execute() as unknown as InstanceListItem[];
+        .execute()) as unknown as InstanceListItem[];
     } catch (err) {
       throw new RepositoryError("Find all instances failed", err);
     }
@@ -52,34 +52,12 @@ export const instanceRepository = {
     }
   },
 
-  findByIdForActor: async (
-    id: string,
-    actorId: string,
-  ): Promise<InstanceModel | undefined> => {
-    try {
-      return await db
-        .selectFrom("instance")
-        .innerJoin(
-          "workflow_version",
-          "workflow_version.id",
-          "instance.workflow_version_id",
-        )
-        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .selectAll("instance")
-        .where("instance.id", "=", id)
-        .where("workflow.created_by", "=", actorId)
-        .executeTakeFirst();
-    } catch (err) {
-      throw new RepositoryError(`Find instance by id=${id} failed`, err);
-    }
-  },
-
-    findDetailByIdForActor: async (
+  findDetailByIdForActor: async (
     id: string,
     actorId: string,
   ): Promise<InstanceListItem | undefined> => {
     try {
-      return await db
+      return (await db
         .selectFrom("instance")
         .innerJoin(
           "workflow_version",
@@ -94,12 +72,12 @@ export const instanceRepository = {
         ])
         .where("instance.id", "=", id)
         .where("workflow.created_by", "=", actorId)
-        .executeTakeFirst() as unknown as InstanceListItem;
+        .executeTakeFirst()) as unknown as InstanceListItem;
     } catch (err) {
       throw new RepositoryError(`Find instance detail by id=${id} failed`, err);
     }
   },
-  
+
   insert: async (data: NewInstance, transaction?: Transaction<DB>) => {
     try {
       return await (transaction ?? db)

@@ -15,6 +15,7 @@ import type { InstanceListItem } from "../repositories/instance.repository.js";
 import type { DB, InstanceStatus } from "../types/database.js";
 import type { Transaction } from "kysely";
 import { taskService } from "./task.service.js";
+import { executionEngine } from "../engine/ExecutionEngine.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -35,46 +36,15 @@ export const instanceService = {
       throw new NotFoundError("No active workflow version found");
     }
 
-    return await db.transaction().execute(async (tx) => {
-      const startNode =
-        await nodeService.getByStartNodeByWorkflowVersionIdOrThrow(
-          workflowVersion.id,
-          tx,
-        );
-
-      const instance = await instanceRepository.insert(
-        {
-          workflow_version_id: workflowVersion.id,
-          started_on: new Date(),
-          status: data.autoAdvance
-            ? InstanceStatuses.IN_PROGRESS
-            : InstanceStatuses.PAUSED,
-          input_variables: converterUtils.objectToJsonValue(data.context),
-          auto_advance: data.autoAdvance,
-          created_by: actor.id,
-          current_node_id: startNode.id,
-        },
-        tx,
-      );
-
-      if (instance.auto_advance) {
-        const task = await taskService.createNew(
-          instance.id,
-          startNode.id,
-          TaskStatuses.IN_PROGRESS,
-          tx,
-        );
-
-        await queueService.enqueue({
-          taskId: task.id,
-        });
-      }
-
-      return instance;
-    });
+    return await executionEngine.startInstance(
+      workflowVersion.id,
+      data.autoAdvance,
+      data.context,
+      actor.id,
+    );
   },
 
-  getById: async (
+  getByIdAndActor: async (
     instanceId: string,
     actorId: string,
   ): Promise<InstanceModel | undefined> => {
@@ -83,13 +53,9 @@ export const instanceService = {
 
   advanceInstance: async (
     instanceId: string,
-    actorId: string,
+    actor: ActorModel,
   ): Promise<InstanceModel> => {
-    const instance = await instanceRepository.findByIdForActor(
-      instanceId,
-      actorId,
-    );
-
+    const instance = await instanceRepository.findById(instanceId);
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);
 
@@ -127,21 +93,16 @@ export const instanceService = {
         `Instance id=${instanceId} has no next node.`,
       );
     }
-    // if (nextNode.type === NodeTypes.USER) {
-    //   throw new StateTransitionError(
-    //     `Instance id=${instanceId} waiting for user task completion.`,
-    //   );
-    // }
 
-    const task = await taskService.createNew(
-      instance.id,
-      nextNode.id,
-      TaskStatuses.IN_PROGRESS,
-    );
+    db.transaction().execute(async (transaction) => {
+      await executionEngine.createNewTask(nextNode, instance, transaction);
+    });
 
-    await queueService.enqueue({ taskId: task.id });
+    const updatedInstance = await instanceRepository.findById(instanceId);
+    if (!updatedInstance)
+      throw new NotFoundError(`Instance id=${instanceId} not found`);
 
-    return instance;
+    return updatedInstance;
   },
 
   updateContext: async (

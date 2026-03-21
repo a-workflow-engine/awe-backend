@@ -9,7 +9,7 @@ import {
 import { NodeTypes } from "../types/enums.js";
 import { AppError } from "../errors/AppError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { nodeService } from "./node.services.js";
+import { nodeSchemaService } from "./nodeSchema.service.js";
 
 const findNodesByEdge = (
   nodes: NodeModel[],
@@ -94,7 +94,7 @@ const getConditionExpressionForEdge = (
 };
 
 const getRuleIdForEdge = (sourceNode: NodeModel, edge: EdgeModel) => {
-  const sourceNodeSchema = nodeService.toNodeSchema(sourceNode);
+  const sourceNodeSchema = nodeSchemaService.getNodeSchema(sourceNode);
   if (sourceNodeSchema.type !== NodeTypes.DECISION) {
     return null;
   }
@@ -175,7 +175,7 @@ export const edgeService = {
     await edgeRepository.deleteByNodeIds(ids, transaction);
   },
 
-  getNextNodeIdsBySourceNodeId: async (
+  getDestinationNodeIdsBySourceNodeId: async (
     nodeId: string,
     transaction?: Transaction<DB>,
   ): Promise<string[]> => {

@@ -33,7 +33,7 @@ export class StartNodeExecutor extends BaseExecutor {
     let fetchables: Record<string, FetchableSettings> = {};
     let urls: Record<string, UrlSettings> = {};
 
-    const outputVariables: ContextVariables = { constants, fetchables, urls };
+    const outputVariables = { constants, fetchables, urls };
 
     configuration.inputDataMap.forEach((dataMap) => {
       if (dataMap.fetchableId) {
@@ -125,7 +125,9 @@ export class StartNodeExecutor extends BaseExecutor {
       constants[dataMap.contextVariableName] = value;
     });
 
-    const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(node.id);
+    const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
+      node.id,
+    );
 
     return {
       status: TaskStatuses.COMPLETED,

@@ -1,11 +1,8 @@
 import { Worker, type Job } from "bullmq";
 import type { ConnectionOptions, Queue } from "bullmq";
 import { executionEngine } from "../ExecutionEngine.js";
-import { TaskStatuses } from "../../types/enums.js";
 import Config from "../../config.js";
 import type { QueueJobData } from "../../types/engine.js";
-import { taskService } from "../../services/task.service.js";
-import { db } from "../../database.js";
 
 export class ExecutionWorker {
   private readonly worker: Worker<QueueJobData>;
@@ -39,31 +36,6 @@ export class ExecutionWorker {
 
   private async processJob(job: Job<QueueJobData>): Promise<void> {
     const { taskId } = job.data;
-    const { instance, node, task } =
-      await taskService.getAllTaskDetails(taskId);
-
-    const result = await executionEngine.runNode(instance, node, task);
-
-    db.transaction().execute(async (transaction) => {
-      result.nextNodeIds.forEach(async (nodeId) => {
-        const task = await taskService.createNew(
-          instance.id,
-          nodeId,
-          TaskStatuses.IN_PROGRESS,
-          transaction,
-        );
-
-        await this.queue.add(
-          "execute-node",
-          { taskId: task.id },
-          {
-            jobId: task.id,
-            attempts: 1,
-            removeOnComplete: { count: 100 },
-            removeOnFail: { count: 5000 },
-          },
-        );
-      });
-    });
+    await executionEngine.executeTask(taskId);
   }
 }

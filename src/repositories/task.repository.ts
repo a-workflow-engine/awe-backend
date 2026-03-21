@@ -1,6 +1,6 @@
 import { db } from "../database.js";
 import type { DB, Task } from "../types/database.js";
-import type { Insertable, Updateable, Transaction } from "kysely";
+import { type Insertable, type Updateable, type Transaction, sql } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type { TaskModel } from "../types/models.js";
 import { TaskStatuses, NodeTypes } from "../types/enums.js";
@@ -82,9 +82,12 @@ export const taskRepository = {
     }
   },
 
-  findAllPending: async (actorId: string): Promise<TaskDetailItem[]> => {
+  findAllPendingUserTasksAndRelations: async (
+    actorId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskDetailItem[]> => {
     try {
-      return (await db
+      return await (transaction ?? db)
         .selectFrom("task")
         .innerJoin("node", "node.id", "task.node_id")
         .innerJoin("instance", "instance.id", "task.instance_id")
@@ -96,16 +99,21 @@ export const taskRepository = {
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .selectAll("task")
         .select((eb) => [
+          eb.ref("node.name").as("node_name"),
+          eb.ref("node.client_id").as("node_client_id"),
           eb.ref("node.configuration").as("node_configuration"),
+
+          eb.ref("workflow.id").as("workflow_id"),
           eb.ref("workflow.name").as("workflow_name"),
-          eb.ref("workflow_version.version").as("version_number"),
+          eb.ref("workflow_version.version").as("workflow_version"),
+          
           eb.ref("instance.current_variables").as("instance_context"),
         ])
         .where("task.status", "=", TaskStatuses.IN_PROGRESS)
         .where("node.type", "=", NodeTypes.USER)
         .where("workflow.created_by", "=", actorId)
         .orderBy("task.created_on", "desc")
-        .execute()) as unknown as TaskDetailItem[];
+        .execute();
     } catch (err) {
       throw new RepositoryError("Find all pending tasks failed", err);
     }

@@ -11,6 +11,7 @@ import type {
   System,
   Task,
   TaskExecution,
+  UserTaskExecution,
   Workflow,
   WorkflowVersion,
 } from "./database.js";
@@ -41,3 +42,5 @@ export type InstanceModel = Selectable<Instance>;
 export type TaskModel = Selectable<Task>;
 
 export type TaskExecutionModel = Selectable<TaskExecution>;
+
+export type UserTaskExecutionModel = Selectable<UserTaskExecution>;

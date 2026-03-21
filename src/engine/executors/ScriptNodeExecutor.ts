@@ -6,7 +6,7 @@ import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { fetchService } from "../../services/fetch.service.js";
-import { buildFeelContext } from "../../utils/contextResolver.js";
+import { contextUtils } from "../../utils/context.utils.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
@@ -25,10 +25,13 @@ export class ScriptNodeExecutor extends BaseExecutor {
     }
 
     const configuration = parsed.data;
-    
-    const currentContext = await buildFeelContext(inputVariables);
+
+    const evaluatedContext =
+      await contextUtils.buildFeelContext(inputVariables);
+
     const parameters = configuration.parameterMap.map(
-      (parameter) => evaluate(parameter.valueExpression, currentContext).value,
+      (parameter) =>
+        evaluate(parameter.valueExpression, evaluatedContext).value,
     );
 
     const responseBody = await fetchService.post(
@@ -59,7 +62,9 @@ export class ScriptNodeExecutor extends BaseExecutor {
       },
     );
 
-    const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(node.id);
+    const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
+      node.id,
+    );
 
     return {
       status: TaskStatuses.COMPLETED,
