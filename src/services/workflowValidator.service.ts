@@ -1,20 +1,21 @@
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NodeTypes } from "../types/enums.js";
 import type { NodeModel, EdgeModel } from "../types/models.js";
-import type {
-  StartNodeConfiguration,
-  EndNodeConfiguration,
-  UserNodeConfiguration,
-  ServiceNodeConfiguration,
-  ScriptNodeConfiguration,
-  DecisionNodeConfiguration,
-} from "../types/workflow.js";
 import { graphUtils } from "../utils/graph.utils.js";
 import {
   validateFeelExpression,
   validateUrlExpression,
   validateConditionExpression,
 } from "../utils/feel.utils.js";
+import { converterUtils } from "../utils/converter.utils.js";
+import {
+  DecisionNodeConfigurationSchema,
+  EndNodeConfigurationSchema,
+  ScriptNodeConfigurationSchema,
+  ServiceNodeConfigurationSchema,
+  StartNodeConfigurationSchema,
+  UserNodeConfigurationSchema,
+} from "../schemas/node.schema.js";
 
 export type ValidationError = {
   code: number;
@@ -47,14 +48,6 @@ export enum ValidationErrorCode {
   DECISION_NODE_MISSING_RULES,
   DECISION_MISSING_DEFAULT_EDGE,
   DECISION_RULES_EDGE_MISMATCH,
-}
-
-function getConfiguration<T>(configuration: unknown): T {
-  return (
-    typeof configuration === "string"
-      ? JSON.parse(configuration)
-      : configuration
-  ) as T;
 }
 
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
@@ -127,51 +120,12 @@ function validateValueExpressions(
   });
 }
 
-function validateResponseMapExpressions(
-  responseMap: Array<{ validationExpression?: string | undefined }>,
-  nodeId: string,
-  messagePrefix: string,
-  errors: ValidationError[],
-): void {
-  responseMap.forEach((entry, index) => {
-    validateExpression(
-      entry.validationExpression,
-      nodeId,
-      `${messagePrefix} ${index + 1}: invalid validation expression`,
-      errors,
-    );
-  });
-}
-
-function validateOnErrorMap(
-  onError:
-    | "terminate"
-    | { errorMap: Array<Record<string, unknown>> }
-    | undefined,
-  nodeId: string,
-  messagePrefix: string,
-  errors: ValidationError[],
-): void {
-  if (!onError || typeof onError !== "object") return;
-
-  onError.errorMap.forEach((entry, index) => {
-    if (
-      "valueExpression" in entry &&
-      typeof entry.valueExpression === "string"
-    ) {
-      validateExpression(
-        entry.valueExpression,
-        nodeId,
-        `${messagePrefix} error map ${index + 1}: invalid value expression`,
-        errors,
-      );
-    }
-  });
-}
-
 function validateStartNode(node: NodeModel): ValidationError[] {
   const errors: ValidationError[] = [];
-  const config = getConfiguration<StartNodeConfiguration>(node.configuration);
+  const config = converterUtils.parseOrThrow(
+    StartNodeConfigurationSchema,
+    node.configuration,
+  );
 
   config.inputDataMap.forEach((entry, index) => {
     validateRequired(
@@ -209,13 +163,16 @@ function validateStartNode(node: NodeModel): ValidationError[] {
 
 function validateEndNode(node: NodeModel): ValidationError[] {
   const errors: ValidationError[] = [];
-  const config = getConfiguration<EndNodeConfiguration>(node.configuration);
+  const config = converterUtils.parseOrThrow(
+    EndNodeConfigurationSchema,
+    node.configuration,
+  );
 
   config.resultMap.forEach((entry, index) => {
     validateRequired(
-      entry.contextVariable.name,
+      entry.variableName,
       node.client_id,
-      `End node result ${index + 1}: context variable name must not be empty`,
+      `End node result ${index + 1}: variable name must not be empty`,
       errors,
     );
 
@@ -234,13 +191,6 @@ function validateEndNode(node: NodeModel): ValidationError[] {
         errors,
       );
     }
-
-    validateExpression(
-      entry.validationExpression,
-      node.client_id,
-      `End node result ${index + 1}: invalid validation expression`,
-      errors,
-    );
   });
 
   return errors;
@@ -248,7 +198,10 @@ function validateEndNode(node: NodeModel): ValidationError[] {
 
 function validateUserNode(node: NodeModel): ValidationError[] {
   const errors: ValidationError[] = [];
-  const config = getConfiguration<UserNodeConfiguration>(node.configuration);
+  const config = converterUtils.parseOrThrow(
+    UserNodeConfigurationSchema,
+    node.configuration,
+  );
 
   config.requestMap.forEach((entry, index) => {
     const hasValue = validateRequired(
@@ -284,13 +237,6 @@ function validateUserNode(node: NodeModel): ValidationError[] {
         errors,
       );
     });
-
-    validateExpression(
-      entry.validationExpression,
-      node.client_id,
-      `User task response field ${index + 1}: invalid validation expression`,
-      errors,
-    );
   });
 
   validateExpression(
@@ -305,7 +251,11 @@ function validateUserNode(node: NodeModel): ValidationError[] {
 
 function validateServiceNode(node: NodeModel): ValidationError[] {
   const errors: ValidationError[] = [];
-  const config = getConfiguration<ServiceNodeConfiguration>(node.configuration);
+
+  const config = converterUtils.parseOrThrow(
+    ServiceNodeConfigurationSchema,
+    node.configuration,
+  );
 
   const hasUrl = validateRequired(
     config.urlExpression,
@@ -330,21 +280,18 @@ function validateServiceNode(node: NodeModel): ValidationError[] {
     "Service task body field",
     errors,
   );
+
   validateHeaders(config.headers, node.client_id, "Service task", errors);
-  validateResponseMapExpressions(
-    config.responseMap,
-    node.client_id,
-    "Service task response",
-    errors,
-  );
-  validateOnErrorMap(config.onError, node.client_id, "Service task", errors);
 
   return errors;
 }
 
 function validateScriptNode(node: NodeModel): ValidationError[] {
   const errors: ValidationError[] = [];
-  const config = getConfiguration<ScriptNodeConfiguration>(node.configuration);
+  const config = converterUtils.parseOrThrow(
+    ScriptNodeConfigurationSchema,
+    node.configuration,
+  );
 
   validateRequired(
     config.sourceCode,
@@ -366,20 +313,14 @@ function validateScriptNode(node: NodeModel): ValidationError[] {
     "Script task parameter",
     errors,
   );
-  validateResponseMapExpressions(
-    config.responseMap,
-    node.client_id,
-    "Script task response",
-    errors,
-  );
-  validateOnErrorMap(config.onError, node.client_id, "Script task", errors);
 
   return errors;
 }
 
 function validateDecisionNode(node: NodeModel): ValidationError[] {
   const errors: ValidationError[] = [];
-  const config = getConfiguration<DecisionNodeConfiguration>(
+  const config = converterUtils.parseOrThrow(
+    DecisionNodeConfigurationSchema,
     node.configuration,
   );
 
@@ -549,7 +490,8 @@ export const workflowValidatorService = {
     for (const node of nodes) {
       if (node.type !== NodeTypes.DECISION) continue;
 
-      const config = getConfiguration<DecisionNodeConfiguration>(
+      const config = converterUtils.parseOrThrow(
+        DecisionNodeConfigurationSchema,
         node.configuration,
       );
       const nodeOutgoingEdges = outgoingEdges.get(node.id) ?? [];

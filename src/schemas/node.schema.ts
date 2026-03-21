@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  FeelDataType,
-  NodeTypes,
-} from "../types/enums.js";
+import { FeelDataType, NodeTypes } from "../types/enums.js";
 
 export const FeelDataTypeSchema = z.enum([
   FeelDataType.NUMBER,
@@ -16,11 +13,6 @@ export const FeelDataTypeSchema = z.enum([
   FeelDataType.NULL,
 ]);
 
-export const ContextVariableSchema = z.object({
-  name: z.string(),
-  scope: z.literal("global"),
-  });
-
 const HttpHeaderSchema = z.object({
   key: z.string(),
   valueExpression: z.string(),
@@ -33,9 +25,6 @@ export const StartNodeConfigurationSchema = z.object({
       dataType: FeelDataTypeSchema,
       contextVariableName: z.string(),
       fetchableId: z.string().optional(),
-      persist: z.boolean().default(false),
-      default: z.unknown().optional(),
-      required: z.boolean().optional(),
     }),
   ),
 
@@ -54,9 +43,8 @@ export const EndNodeConfigurationSchema = z.object({
   success: z.boolean(),
   resultMap: z.array(
     z.object({
-      contextVariable: ContextVariableSchema,
+      variableName: z.string(),
       valueExpression: z.string(),
-      validationExpression: z.string().optional(),
     }),
   ),
   message: z.string().optional(),
@@ -66,7 +54,7 @@ export const UserNodeConfigurationSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   assignee: z.string().optional(),
-  maxAttempts: z.number().optional(),
+  maxAttempts: z.number().optional().default(1),
 
   requestMap: z.array(
     z.object({
@@ -79,9 +67,7 @@ export const UserNodeConfigurationSchema = z.object({
     z.object({
       fieldId: z.string(),
       label: z.string(),
-      default: z.unknown().optional(),
-      required: z.boolean().optional(),
-      contextVariable: ContextVariableSchema.optional(),
+      contextVariableName: z.string(),
       type: FeelDataTypeSchema,
 
       uiType: z
@@ -103,8 +89,6 @@ export const UserNodeConfigurationSchema = z.object({
           }),
         )
         .optional(),
-
-      validationExpression: z.string().optional(),
     }),
   ),
 });
@@ -117,31 +101,14 @@ const ServiceBodySchema = z.object({
 const ServiceResponseSchema = z.object({
   jsonPath: z.string(),
   type: FeelDataTypeSchema,
-  contextVariable: ContextVariableSchema.optional(),
-  validationExpression: z.string().optional(),
+  contextVariableName: z.string(),
 });
-
-const ServiceErrorMapItemSchema = z
-  .union([
-    z.object({
-      jsonPath: z.string(),
-      type: FeelDataTypeSchema,
-    }),
-    z.object({
-      valueExpression: z.string(),
-    }),
-  ])
-  .and(
-    z.object({
-      contextVariable: ContextVariableSchema,
-    }),
-  );
 
 export const ServiceNodeConfigurationSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   urlExpression: z.string(),
 
-  maxAttempts: z.number().optional(),
+  maxAttempts: z.number().optional().default(1),
   timeoutMs: z.number().optional(),
   retryDelayMs: z.number().optional(),
 
@@ -149,20 +116,11 @@ export const ServiceNodeConfigurationSchema = z.object({
   headers: z.array(HttpHeaderSchema).optional(),
 
   responseMap: z.array(ServiceResponseSchema),
-
-  onError: z
-    .union([
-      z.literal("terminate"),
-      z.object({
-        errorMap: z.array(ServiceErrorMapItemSchema),
-      }),
-    ])
-    .optional(),
 });
 
 export const ScriptNodeConfigurationSchema = z.object({
   runtime: z.literal("python3"),
-  maxAttempts: z.number().optional(),
+  maxAttempts: z.number().optional().default(1),
   sourceCode: z.string(),
   entryFunctionName: z.string(),
 
@@ -177,24 +135,9 @@ export const ScriptNodeConfigurationSchema = z.object({
     z.object({
       jsonPath: z.string(),
       type: FeelDataTypeSchema,
-      contextVariable: ContextVariableSchema.optional(),
-      validationExpression: z.string().optional(),
+      contextVariableName: z.string(),
     }),
   ),
-
-  onError: z
-    .union([
-      z.literal("terminate"),
-      z.object({
-        errorMap: z.array(
-          z.object({
-            valueExpression: z.string(),
-            contextVariable: ContextVariableSchema,
-          }),
-        ),
-      }),
-    ])
-    .optional(),
 });
 
 export const DecisionNodeConfigurationSchema = z.object({

@@ -2,6 +2,7 @@ import { DataIntegrityError } from "../errors/DataIntegrity";
 import type { JsonValue } from "../types/database";
 import type { ContextVariables } from "../types/engine";
 import type { NodeInputSchema } from "../types/workflow";
+import { z } from "zod";
 
 function isNodeInputSchema(value: unknown): value is NodeInputSchema {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -53,5 +54,19 @@ export const converterUtils = {
     }
 
     return obj as unknown as ContextVariables;
+  },
+
+  parseOrThrow<T>(
+    schema: z.ZodSchema<T>,
+    data: unknown,
+    errorMessage = "Invalid data",
+  ): T {
+    const result = schema.safeParse(data);
+
+    if (result.success === false) {
+      throw new DataIntegrityError(errorMessage, result.error);
+    }
+
+    return result.data;
   },
 };

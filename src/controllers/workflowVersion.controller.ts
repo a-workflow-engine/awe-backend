@@ -38,8 +38,6 @@ export const workflowVersionController = {
     res.status(200).json({
       valid: result.valid,
       errors: result.errors,
-      versionId: workflowVersion.id,
-      version: workflowVersion.version,
       status: workflowVersion.status,
     });
   },

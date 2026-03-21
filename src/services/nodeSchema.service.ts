@@ -17,12 +17,14 @@ import {
   ServiceNodeConfigurationSchema,
   EndNodeConfigurationSchema,
   DecisionNodeConfigurationSchema,
+  NodeSchema,
 } from "../schemas/node.schema.js";
 import type { NodeModel } from "../types/models.js";
+import { converterUtils } from "../utils/converter.utils.js";
 
 export const nodeSchemaService = {
   getNodeSchema: (node: NodeModel): Node => {
-    const base = {
+    const nodeObject = {
       id: node.client_id,
       label: node.name,
       description: node.description,
@@ -30,57 +32,10 @@ export const nodeSchemaService = {
         node.x_coordinate && node.y_coordinate
           ? { x: node.x_coordinate, y: node.y_coordinate }
           : null,
+      configuration: node.configuration,
     };
 
-    switch (node.type) {
-      case NodeTypes.START:
-        return {
-          ...base,
-          type: NodeTypes.START,
-          configuration: StartNodeConfigurationSchema.parse(node.configuration),
-        };
-
-      case NodeTypes.USER:
-        return {
-          ...base,
-          type: NodeTypes.USER,
-          configuration: UserNodeConfigurationSchema.parse(node.configuration),
-        };
-
-      case NodeTypes.SERVICE:
-        return {
-          ...base,
-          type: NodeTypes.SERVICE,
-          configuration: ServiceNodeConfigurationSchema.parse(
-            node.configuration,
-          ),
-        };
-
-      case NodeTypes.SCRIPT:
-        return {
-          ...base,
-          type: NodeTypes.SCRIPT,
-          configuration: ScriptNodeConfigurationSchema.parse(
-            node.configuration,
-          ),
-        };
-
-      case NodeTypes.DECISION:
-        return {
-          ...base,
-          type: NodeTypes.DECISION,
-          configuration: DecisionNodeConfigurationSchema.parse(
-            node.configuration,
-          ),
-        };
-
-      case NodeTypes.END:
-        return {
-          ...base,
-          type: NodeTypes.END,
-          configuration: EndNodeConfigurationSchema.parse(node.configuration),
-        };
-    }
+    return converterUtils.parseOrThrow(NodeSchema, nodeObject);
   },
 
   getInputOutputSchemas: (
@@ -184,9 +139,7 @@ export const nodeSchemaService = {
     });
 
     configuration.responseMap.forEach((data) => {
-      if (data.contextVariable) {
-        outputVariableSet.add(data.contextVariable.name);
-      }
+      outputVariableSet.add(data.contextVariableName);
     });
 
     return {
@@ -218,9 +171,7 @@ export const nodeSchemaService = {
     }
 
     configuration.responseMap.forEach((data) => {
-      if (data.contextVariable) {
-        outputVariableSet.add(data.contextVariable.name);
-      }
+      outputVariableSet.add(data.contextVariableName);
     });
 
     return {
@@ -250,9 +201,7 @@ export const nodeSchemaService = {
     });
 
     configuration.responseMap.forEach((data) => {
-      if (data.contextVariable) {
-        outputVariableSet.add(data.contextVariable.name);
-      }
+      outputVariableSet.add(data.contextVariableName);
     });
 
     return {

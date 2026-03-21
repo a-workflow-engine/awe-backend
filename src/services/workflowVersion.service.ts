@@ -71,8 +71,8 @@ export const workflowVersionService = {
         );
 
       if (
-        workflowVersion.status !== WorkflowVersionStatuses.DRAFT &&
-        workflowVersion.status !== WorkflowVersionStatuses.VALID
+        workflowVersion.status === WorkflowVersionStatuses.PUBLISHED ||
+        workflowVersion.status === WorkflowVersionStatuses.ACTIVE
       ) {
         throw new StateTransitionError(
           `Workflow version ${data.version} cannot be updated because it is in ${workflowVersion.status} status`,
@@ -168,27 +168,26 @@ export const workflowVersionService = {
   },
 
   changeStatus: async (data: StatusPartialUpdateInput) => {
+    let workflowVersion =
+      await workflowVersionRepository.findByWorkflowIdAndVersion(
+        data.workflowId,
+        data.version,
+      );
+
+    const currentStatus = workflowVersion.status;
+    const newStatus = data.status;
+
+    if (currentStatus === WorkflowVersionStatuses.DRAFT) {
+      throw new StateTransitionError(
+        "Invalid workflow version state transition from DRAFT",
+      );
+    }
+
+    if (currentStatus === newStatus) {
+      return workflowVersion;
+    }
+
     return db.transaction().execute(async (transaction) => {
-      let workflowVersion =
-        await workflowVersionRepository.findByWorkflowIdAndVersion(
-          data.workflowId,
-          data.version,
-          transaction,
-        );
-
-      const currentStatus = workflowVersion.status;
-      const newStatus = data.status;
-
-      if (currentStatus === WorkflowVersionStatuses.DRAFT) {
-        throw new StateTransitionError(
-          "Invalid workflow version state transition from DRAFT",
-        );
-      }
-
-      if (currentStatus === newStatus) {
-        return workflowVersion;
-      }
-
       if (newStatus === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
           data.workflowId,

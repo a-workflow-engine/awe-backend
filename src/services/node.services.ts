@@ -22,6 +22,10 @@ export const nodeService = {
     workflowVersion: WorkflowVersionModel,
     transaction?: Transaction<DB>,
   ): Promise<NodeModel[]> => {
+    if (data.length === 0) {
+      return [];
+    }
+
     const nodes: NewNode[] = data.map((node) => {
       const maxAttempts =
         node.type === NodeTypes.START ||
