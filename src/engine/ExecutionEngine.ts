@@ -1,6 +1,7 @@
 import { db } from "../database.js";
 import { StartNodeExecutor } from "./executors/StartNodeExecutor.js";
 import { EndNodeExecutor } from "./executors/EndNodeExecutor.js";
+import { DecisionNodeExecutor } from "./executors/DecisionNodeExecutor.js";
 import type { BaseExecutor } from "./executors/BaseExecutor.js";
 import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -18,12 +19,11 @@ import { userTaskService } from "../services/userTask.service.js";
 import { queueService } from "../services/queue.service.js";
 import { EngineError } from "../errors/EngineError.js";
 import type { Transaction } from "kysely";
-import { edgeService } from "../services/edge.services.js";
 
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
   [NodeTypes.END]: new EndNodeExecutor(),
-  // [NodeTypes.DECISION]: new DecisionNodeExecutor(),
+  [NodeTypes.DECISION]: new DecisionNodeExecutor(),
   [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
 };
 
@@ -180,25 +180,38 @@ export const executionEngine = {
       );
     }
 
+    let executionThrew = false;
     const executor = executors[node.type];
     if (!executor) {
+      await db.transaction().execute(async (transaction) => {
+        await instanceService.updateStatus(
+          instance.id,
+          InstanceStatuses.FAILED,
+          transaction,
+        );
+        await taskService.updateStatus(
+          task.id,
+          TaskStatuses.FAILED,
+          transaction,
+        );
+      });
+
       throw new EngineError(`Executor for node type="${node.type}" not found`);
     }
 
     const executionContext = getExecutionContext(node, instance);
-
-    const taskExecution = await taskExecutionService.startNew(
-      task.id,
-      TaskStatuses.IN_PROGRESS,
-      executionContext,
-    );
 
     let result: ExecutorResult = {
       status: TaskStatuses.IN_PROGRESS,
       outputVariables: {},
       nextNodeId: null,
     };
-    let executionThrew = false;
+
+    const taskExecution = await taskExecutionService.startNew(
+      task.id,
+      TaskStatuses.IN_PROGRESS,
+      executionContext,
+    );
 
     try {
       result = await executor.execute(node, executionContext);

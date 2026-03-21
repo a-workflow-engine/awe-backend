@@ -1,7 +1,7 @@
 import { taskRepository } from "../repositories/task.repository.js";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
-import { queueService } from "./queue.service.js";
+import { ValidationError } from "../errors/ValidationError.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
@@ -11,7 +11,7 @@ import { TaskStatuses, InstanceStatuses, NodeTypes } from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
 import { instanceService } from "./instance.service.js";
 import type { ContextVariables } from "../types/engine.js";
-import { taskService } from "./task.service.js";
+import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import { AppError } from "../errors/AppError.js";
 import type {
@@ -21,10 +21,9 @@ import type {
   UserTaskExecutionModel,
 } from "../types/models.js";
 import { contextUtils } from "../utils/context.utils.js";
-import type { NodeInputSchema } from "../types/workflow.js";
 import type { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
-import { environemntService as environmentService } from "./environment.services.js";
+import { environmentService } from "./environment.services.js";
 import type { PendingUserTaskList } from "../types/userTask.js";
 import { executionEngine } from "../engine/ExecutionEngine.js";
 import { nodeService } from "./node.services.js";
@@ -187,14 +186,33 @@ export const userTaskService = {
 
     const configuration = parsed.data;
 
+    const executionContext = converterUtils.jsonValueToContextVariables(
+      userTaskExecution.request_variables,
+    );
+
+    const validationErrors = await validateUserTaskInput(
+      userInput,
+      configuration.responseMap,
+      executionContext,
+    );
+
+    if (validationErrors.length > 0) {
+      throw new ValidationError(
+        "Invalid user input",
+        validationErrors.map((e) => ({
+          field: e.field,
+          message: e.error,
+        })),
+      );
+    }
+
     const outputVariables: Record<string, unknown> = {};
     for (const field of configuration.responseMap) {
       if (!field.contextVariable) {
         continue;
       }
 
-      const data = userInput[field.fieldId];
-      outputVariables[field.contextVariable.name] = data;
+      outputVariables[field.contextVariable.name] = userInput[field.fieldId];
     }
 
     const mainContext = converterUtils.jsonValueToContextVariables(

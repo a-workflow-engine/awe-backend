@@ -1,8 +1,6 @@
 import { taskRepository } from "../repositories/task.repository.js";
 import type { DB, TaskStatus } from "../types/database.js";
 import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
-import { nodeRepository } from "../repositories/node.repository.js";
-import { instanceRepository } from "../repositories/instance.repository.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import type { Transaction } from "kysely";
 
@@ -10,14 +8,14 @@ export const taskService = {
   getAllTaskDetails: async (
     taskId: string,
   ): Promise<{ instance: InstanceModel; node: NodeModel; task: TaskModel }> => {
-    const task = await taskRepository.findById(taskId);
+    const task = await taskService.findById(taskId);
     if (!task) {
       throw new NotFoundError("task");
     }
 
     const [instance, node] = await Promise.all([
-      instanceRepository.findById(task.instance_id),
-      nodeRepository.findById(task.node_id),
+      instanceService.findById(task.instance_id),
+      nodeService.getById(task.node_id),
     ]);
 
     if (!instance) {

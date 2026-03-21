@@ -20,10 +20,7 @@ export const instanceController = {
 
   getById: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.getByIdAndActor(
-      instanceId,
-      req.actor.id,
-    );
+    const instance = await instanceService.get(instanceId, req.actor.id);
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);
     return res.json({ instance });
