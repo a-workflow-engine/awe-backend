@@ -88,7 +88,7 @@ export const executionEngine = {
       const inputVariables: ContextVariables =
         node.type === NodeTypes.START
           ? {
-              constants: freshInputJson,
+              constants: freshInputJson as Record<string, unknown>,
               fetchables: {},
               urls: {},
             }
@@ -101,7 +101,11 @@ export const executionEngine = {
       ) as ContextVariables;
 
       if (!currentVariables || typeof currentVariables !== "object") {
-        currentVariables = { constants: {}, fetchables: {}, urls: {} };
+        currentVariables = {
+          constants: {} as Record<string, unknown>,
+          fetchables: {},
+          urls: {},
+        };
       }
 
       currentVariables.constants = currentVariables.constants ?? {};

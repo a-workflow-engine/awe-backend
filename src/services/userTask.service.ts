@@ -5,12 +5,14 @@ import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
+import { ValidationError } from "../errors/ValidationError.js";
 import { TaskStatuses, InstanceStatuses } from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
 import { instanceService } from "./instance.service.js";
 import type { ContextVariables } from "../types/engine.js";
 import { taskService } from "./task.service.js";
 import { nodeService } from "./node.services.js";
+import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 
 export async function resumeUserTask(
   taskId: string,
@@ -48,16 +50,36 @@ export async function resumeUserTask(
 
   const configuration = parsed.data;
 
-  const outputVariables: Record<string, unknown> = {};
-  for (const field of configuration.responseMap) {
-    if (field.contextVariable) {
-      outputVariables[field.contextVariable.name] = userInput[field.fieldId];
-    }
-  }
-
   const currentVariables = converterUtils.jsonValueToObject(
     instance.current_variables,
   ) as ContextVariables;
+
+  const validationErrors = await validateUserTaskInput(
+    userInput,
+    configuration.responseMap,
+    currentVariables,
+  );
+
+  if (validationErrors.length > 0) {
+    throw new ValidationError(
+      "Invalid user input",
+      validationErrors.map((e) => ({
+        field: e.field,
+        message: e.error,
+      })),
+    );
+  }
+
+  const outputVariables: Record<string, unknown> = {};
+  for (const field of configuration.responseMap) {
+    if (field.contextVariable) {
+      const value =
+        userInput[field.fieldId] !== undefined
+          ? userInput[field.fieldId]
+          : field.default;
+      outputVariables[field.contextVariable.name] = value;
+    }
+  }
 
   currentVariables.constants = {
     ...currentVariables.constants,

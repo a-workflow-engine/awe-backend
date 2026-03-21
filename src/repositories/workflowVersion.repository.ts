@@ -12,6 +12,7 @@ import { WorkflowVersionStatuses } from "../types/enums.js";
 
 export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
+export type NewWorkflowVersionWithoutVersion = Omit<NewWorkflowVersion, "version">;
 
 export const workflowVersionRepository = {
   findByWorkflowId: async (
@@ -68,7 +69,7 @@ export const workflowVersionRepository = {
   },
 
   insertNextVersion: async (
-    data: NewWorkflowVersion,
+    data: NewWorkflowVersionWithoutVersion,
     transaction?: Transaction<DB>,
   ) => {
     try {

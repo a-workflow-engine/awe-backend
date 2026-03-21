@@ -7,6 +7,7 @@ import { nodeService } from "./node.services.js";
 import { queueService } from "./queue.service.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { InstanceStatuses, TaskStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -14,6 +15,9 @@ import type { InstanceListItem } from "../repositories/instance.repository.js";
 import type { DB, InstanceStatus } from "../types/database.js";
 import type { Transaction } from "kysely";
 import { taskService } from "./task.service.js";
+import { StartNodeConfigurationSchema } from "../schemas/node.schema.js";
+import { validateInstanceInput } from "../utils/inputValidator.utils.js";
+import { ValidationError } from "../errors/ValidationError.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -40,6 +44,30 @@ export const instanceService = {
           workflowVersion.id,
           tx,
         );
+
+      const configParsed = StartNodeConfigurationSchema.safeParse(
+        startNode.configuration,
+      );
+
+      if (!configParsed.success) {
+        throw new DataIntegrityError(
+          `Start node configuration is invalid: ${configParsed.error.message}`,
+        );
+      }
+
+      const inputDataMap = configParsed.data.inputDataMap;
+      const inputContext = data.context ?? {};
+      const validationErrors = validateInstanceInput(inputContext, inputDataMap);
+
+      if (validationErrors.length > 0) {
+        throw new ValidationError(
+          "Invalid input data",
+          validationErrors.map((e) => ({
+            field: e.field,
+            message: e.error,
+          })),
+        );
+      }
 
       const instance = await instanceRepository.insert(
         {
