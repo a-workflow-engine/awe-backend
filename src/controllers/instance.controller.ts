@@ -18,7 +18,7 @@ export const instanceController = {
     return res.status(201).json({ instance });
   },
 
-  getById: async (req: Request, res: Response) => {
+  get: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instance = await instanceService.get(instanceId, req.actor.id);
     if (!instance)
