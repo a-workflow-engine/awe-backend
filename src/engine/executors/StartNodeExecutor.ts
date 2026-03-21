@@ -12,6 +12,7 @@ import type {
   FetchableSettings,
   UrlSettings,
 } from "../../types/engine.js";
+import { contextUtils } from "../../utils/context.utils.js";
 
 export class StartNodeExecutor extends BaseExecutor {
   async execute(
@@ -65,7 +66,8 @@ export class StartNodeExecutor extends BaseExecutor {
         continue;
       }
 
-      const value = inputJson[dataMap.jsonPath];
+      const value = contextUtils.getByPath(inputJson, dataMap.jsonPath);
+
       if (value === undefined) {
         return {
           status: TaskStatuses.FAILED,

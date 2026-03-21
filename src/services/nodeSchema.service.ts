@@ -10,15 +10,7 @@ import type {
   UserNodeConfiguration,
 } from "../types/workflow.js";
 import { NodeTypes } from "../types/enums.js";
-import {
-  StartNodeConfigurationSchema,
-  UserNodeConfigurationSchema,
-  ScriptNodeConfigurationSchema,
-  ServiceNodeConfigurationSchema,
-  EndNodeConfigurationSchema,
-  DecisionNodeConfigurationSchema,
-  NodeSchema,
-} from "../schemas/node.schema.js";
+import { NodeSchema } from "../schemas/node.schema.js";
 import type { NodeModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
 
@@ -32,6 +24,7 @@ export const nodeSchemaService = {
         node.x_coordinate && node.y_coordinate
           ? { x: node.x_coordinate, y: node.y_coordinate }
           : null,
+      type: node.type,
       configuration: node.configuration,
     };
 

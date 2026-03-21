@@ -1,6 +1,10 @@
 import { db } from "../database.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
-import { WorkflowVersionStatuses } from "../types/enums.js";
+import {
+  FeelDataType,
+  NodeTypes,
+  WorkflowVersionStatuses,
+} from "../types/enums.js";
 import type { WorkflowVersionModel } from "../types/models.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
@@ -17,6 +21,7 @@ import { workflowValidatorService } from "./workflowValidator.service.js";
 import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 
@@ -58,7 +63,29 @@ export const workflowVersionService = {
       edgeService.toEdgeSchema(edge, nodeModels),
     );
 
-    return { workflowVersion, nodes, edges };
+    const startVariables: { jsonPath: string; dataType: FeelDataType }[] = [];
+    const startNode = nodes.find((node) => node.type === NodeTypes.START);
+    if (
+      !startNode &&
+      workflowVersion.status !== WorkflowVersionStatuses.DRAFT
+    ) {
+      throw new DataIntegrityError(
+        `Workflow version id = ${workflowVersion.id} does not have start node for its status = ${workflowVersion.status}`,
+      );
+    }
+
+    if (startNode) {
+      startNode.configuration.inputDataMap.forEach((data) => {
+        if (!data.fetchableId) {
+          startVariables.push({
+            jsonPath: data.jsonPath,
+            dataType: data.dataType,
+          });
+        }
+      });
+    }
+
+    return { workflowVersion, nodes, edges, startVariables };
   },
 
   update: async (data: UpdateVersionInput): Promise<WorkflowVersionModel> => {

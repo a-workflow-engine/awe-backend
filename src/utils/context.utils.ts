@@ -4,17 +4,6 @@ import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
 
-function getByPath(data: unknown, path: string): unknown {
-  const parts = path.split(".").filter(Boolean);
-
-  return parts.reduce<unknown>((acc, key) => {
-    if (acc === null || acc === undefined) {
-      return undefined;
-    }
-    return (acc as Record<string, unknown>)[key];
-  }, data);
-}
-
 type DataTypeMap = {
   string: string;
   number: number;
@@ -38,6 +27,17 @@ function isValidType(value: unknown, type: keyof DataTypeMap): boolean {
 }
 
 export const contextUtils = {
+  getByPath(data: unknown, path: string): unknown {
+    const parts = path.split(".").filter(Boolean);
+
+    return parts.reduce<unknown>((acc, key) => {
+      if (acc === null || acc === undefined) {
+        return undefined;
+      }
+      return (acc as Record<string, unknown>)[key];
+    }, data);
+  },
+
   async buildFeelContext(
     contextVariables: ContextVariables,
   ): Promise<{ context: Record<string, unknown> }> {
@@ -90,7 +90,10 @@ export const contextUtils = {
         );
       }
 
-      const rawValue = getByPath(fetchedResponses[urlId], jsonPath);
+      const rawValue = contextUtils.getByPath(
+        fetchedResponses[urlId],
+        jsonPath,
+      );
       returnContext[varName] = rawValue;
     }
 
@@ -102,7 +105,6 @@ export const contextUtils = {
     context: Record<string, unknown>,
     dataType: T,
   ): DataTypeMap[T] {
-
     const result = evaluate(expression, context);
 
     if (!result || result.warnings) {
