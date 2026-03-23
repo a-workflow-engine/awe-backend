@@ -5,6 +5,10 @@ import { BaseExecutor } from "./BaseExecutor.js";
 import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
+<<<<<<< HEAD
+=======
+import { httpRequestService } from "../../services/httpRequest.service.js";
+>>>>>>> 5b495ea0cc67c5cde35513faeabf446147a497a4
 import { buildFeelContext } from "../../utils/contextResolver.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
@@ -65,6 +69,7 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     let outputVariables: Record<string, unknown> = {};
 
+<<<<<<< HEAD
     configuration.responseMap.forEach(({ jsonPath, contextVariable }) => {
       if (!contextVariable) return;
 
@@ -73,6 +78,18 @@ export class ScriptNodeExecutor extends BaseExecutor {
           ? parsedOutput?.[jsonPath]
           : parsedOutput;
     });
+=======
+    configuration.responseMap.forEach(
+      ({ jsonPath, contextVariable }) => {
+        if (!contextVariable) return;
+
+        outputVariables[contextVariable.name] =
+          typeof parsedOutput === "object"
+            ? parsedOutput?.[jsonPath]
+            : parsedOutput;
+      }
+    );
+>>>>>>> 5b495ea0cc67c5cde35513faeabf446147a497a4
 
     const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(
       node.id,
