@@ -23,6 +23,7 @@ import { userTaskService } from "../services/userTask.service.js";
 import { queueService } from "../services/queue.service.js";
 import { EngineError } from "../errors/EngineError.js";
 import type { Transaction } from "kysely";
+import { StateTransitionError } from "../errors/StateTransitionError.js";
 
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
@@ -168,21 +169,32 @@ export const executionEngine = {
     });
   },
 
+  validateInstanceCanExecuteOrThrow: (instance: InstanceModel) => {
+    if (
+      instance.status === InstanceStatuses.FAILED ||
+      instance.status === InstanceStatuses.TERMINATED ||
+      instance.status === InstanceStatuses.COMPLETED
+    ) {
+      throw new StateTransitionError(
+        `Instance has already ${instance.status}. Cannot execute next node.`,
+      );
+    }
+
+    if (
+      !instance.auto_advance &&
+      instance.status === InstanceStatuses.IN_PROGRESS
+    ) {
+      throw new StateTransitionError("Instance is in execution");
+    }
+
+    if (instance.auto_advance && instance.status === InstanceStatuses.PAUSED) {
+      throw new StateTransitionError(`Instance is ${InstanceStatuses.PAUSED}`);
+    }
+  },
+
   executeTask: async (taskId: string) => {
     const { instance, node, task } =
       await taskService.getAllTaskDetails(taskId);
-
-    if (instance.status !== InstanceStatuses.IN_PROGRESS) {
-      throw new EngineError(
-        `Instance is not ${InstanceStatuses.IN_PROGRESS}. Cannot execute task id = ${taskId}`,
-      );
-    }
-
-    if (task.status !== TaskStatuses.IN_PROGRESS) {
-      throw new EngineError(
-        `Task is not ${TaskStatuses.IN_PROGRESS}. Cannot execute task id = ${taskId}`,
-      );
-    }
 
     console.log("Executing:", node.type);
 
@@ -214,6 +226,8 @@ export const executionEngine = {
     let taskExecution: TaskExecutionModel;
 
     try {
+      executionEngine.validateInstanceCanExecuteOrThrow(instance);
+
       const executionContext = getExecutionContext(node, instance);
 
       taskExecution = await taskExecutionService.startNew(
@@ -318,8 +332,22 @@ export const executionEngine = {
     instance: InstanceModel,
     transaction: Transaction<DB>,
   ) => {
-    const task = await taskService.createNew(
+    let instanceStatus: InstanceStatus;
+
+    if (instance.auto_advance || node.type === NodeTypes.USER) {
+      instanceStatus = InstanceStatuses.IN_PROGRESS;
+    } else {
+      instanceStatus = InstanceStatuses.PAUSED;
+    }
+
+    const updatedInstance = await instanceService.updateStatus(
       instance.id,
+      instanceStatus,
+      transaction,
+    );
+
+    const task = await taskService.createNew(
+      updatedInstance.id,
       node.id,
       TaskStatuses.IN_PROGRESS,
       transaction,
@@ -329,7 +357,6 @@ export const executionEngine = {
       await queueService.enqueue({
         taskId: task.id,
       });
-
       return;
     }
 

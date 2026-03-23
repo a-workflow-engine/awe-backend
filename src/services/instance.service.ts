@@ -74,7 +74,7 @@ export const instanceService = {
   advanceInstance: async (
     instanceId: string,
     actor: ActorModel,
-  ): Promise<InstanceModel> => {
+  ) => {
     const instance = await instanceRepository.findById(instanceId);
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);
@@ -85,21 +85,7 @@ export const instanceService = {
       );
     }
 
-    if (
-      instance.status === InstanceStatuses.FAILED ||
-      instance.status === InstanceStatuses.TERMINATED ||
-      instance.status === InstanceStatuses.COMPLETED
-    ) {
-      throw new StateTransitionError(
-        `Instance id=${instanceId} is has already ended. Cannot advance`,
-      );
-    }
-
-    if (instance.status === InstanceStatuses.IN_PROGRESS) {
-      throw new StateTransitionError(
-        `Instance id=${instanceId} is in progress. Wait for previous task.`,
-      );
-    }
+    executionEngine.validateInstanceCanExecuteOrThrow(instance);
 
     if (!instance.current_node_id) {
       throw new StateTransitionError(
@@ -117,12 +103,6 @@ export const instanceService = {
     db.transaction().execute(async (transaction) => {
       await executionEngine.createNextTask(nextNode, instance, transaction);
     });
-
-    const updatedInstance = await instanceRepository.findById(instanceId);
-    if (!updatedInstance)
-      throw new NotFoundError(`Instance id=${instanceId} not found`);
-
-    return updatedInstance;
   },
 
   updateContext: async (

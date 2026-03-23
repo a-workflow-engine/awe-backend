@@ -65,10 +65,7 @@ export const instanceController = {
 
   advance: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.advanceInstance(
-      instanceId,
-      req.actor,
-    );
-    return res.json({ instance });
+    await instanceService.advanceInstance(instanceId, req.actor);
+    return res.json({});
   },
 };
