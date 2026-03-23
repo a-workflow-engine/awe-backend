@@ -5,10 +5,7 @@ import { BaseExecutor } from "./BaseExecutor.js";
 import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-
-import { httpRequestService } from "../../services/httpRequest.service.js";
-
-import { buildFeelContext } from "../../utils/contextResolver.js";
+import { contextUtils } from "../../utils/context.utils.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
@@ -29,10 +26,12 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     const configuration = parsed.data;
 
-    const currentContext = await buildFeelContext(inputVariables);
+    const evaluatedContext =
+      await contextUtils.buildFeelContext(inputVariables);
 
     const parameters = configuration.parameterMap.map(
-      (parameter) => evaluate(parameter.valueExpression, currentContext).value,
+      (parameter) =>
+        evaluate(parameter.valueExpression, evaluatedContext).value,
     );
 
     let parsedOutput;
@@ -68,19 +67,15 @@ export class ScriptNodeExecutor extends BaseExecutor {
 
     let outputVariables: Record<string, unknown> = {};
 
-
-    configuration.responseMap.forEach(({ jsonPath, contextVariable }) => {
-      if (!contextVariable) return;
-
-      outputVariables[contextVariable.name] =
+    configuration.responseMap.forEach(({ jsonPath, contextVariableName }) => {
+      outputVariables[contextVariableName] =
         typeof parsedOutput === "object"
           ? parsedOutput?.[jsonPath]
           : parsedOutput;
     });
 
-    const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(
+    const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
       node.id,
-      transaction,
     );
 
     return {

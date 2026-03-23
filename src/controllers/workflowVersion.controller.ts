@@ -41,8 +41,6 @@ export const workflowVersionController = {
     res.status(200).json({
       valid: result.valid,
       errors: result.errors,
-      versionId: workflowVersion.id,
-      version: workflowVersion.version,
       status: workflowVersion.status,
     });
   },
@@ -53,7 +51,7 @@ export const workflowVersionController = {
       actor: req.actor,
     });
 
-    const { workflowVersion, nodes, edges } =
+    const { workflowVersion, nodes, edges, startVariables } =
       await workflowVersionService.getDetail(data);
 
     return res.status(200).json({
@@ -66,6 +64,7 @@ export const workflowVersionController = {
       modifiedAt: workflowVersion.modified_on,
       nodes,
       edges,
+      startVariables,
     });
   },
 

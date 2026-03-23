@@ -1,0 +1,230 @@
+import { db } from "../database.js";
+import type { DB, TaskStatus, UserTaskExecution } from "../types/database.js";
+import { type Insertable, type Updateable, type Transaction } from "kysely";
+import { RepositoryError } from "../errors/RepositoryError.js";
+import type { NodeModel, UserTaskExecutionModel } from "../types/models.js";
+import type {
+  PendingUserTaskList,
+  WorkflowDetailsForUserTask,
+} from "../types/userTask.js";
+import {
+  NODE_KEYS,
+  selectAllWithPrefix,
+  USER_TASK_EXECUTION_KEYS,
+} from "./utils.js";
+
+type NewUserTaskExecution = Insertable<UserTaskExecution>;
+type UpdateUserTaskExecution = Updateable<UserTaskExecution>;
+
+export const userTaskExecutionRepository = {
+  insert: async (
+    data: NewUserTaskExecution,
+    transaction?: Transaction<DB>,
+  ): Promise<UserTaskExecutionModel> => {
+    try {
+      return await (transaction ?? db)
+        .insertInto("user_task_execution")
+        .values(data)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    } catch (err) {
+      throw new RepositoryError("User task execution insert failed", err);
+    }
+  },
+
+  updateById: async (
+    id: string,
+    data: UpdateUserTaskExecution,
+    transaction?: Transaction<DB>,
+  ): Promise<UserTaskExecutionModel> => {
+    try {
+      return await (transaction ?? db)
+        .updateTable("user_task_execution")
+        .set(data)
+        .where("id", "=", id)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+    } catch (err) {
+      throw new RepositoryError("User task execution update failed", err);
+    }
+  },
+
+  findByEnvironmentIdAndStatus: async (
+    environmentId: string,
+    status: TaskStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<PendingUserTaskList[]> => {
+    try {
+      const result = await (transaction ?? db)
+        .selectFrom("user_task_execution")
+        .innerJoin("task", "task.id", "user_task_execution.task_id")
+        .innerJoin("instance", "instance.id", "task.instance_id")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .select((eb) => [
+          eb.ref("user_task_execution.id").as("user_task_execution_id"),
+          eb.ref("user_task_execution.title").as("user_task_execution_title"),
+          eb
+            .ref("user_task_execution.assignee")
+            .as("user_task_execution_assignee"),
+          eb
+            .ref("user_task_execution.created_on")
+            .as("user_task_execution_created_on"),
+
+          eb.ref("task.instance_id").as("instance_id"),
+          eb.ref("workflow.id").as("workflow_id"),
+          eb.ref("workflow.name").as("workflow_name"),
+          eb.ref("workflow_version.version").as("workflow_version"),
+        ])
+        .where("user_task_execution.status", "=", status)
+        .where("workflow.environment_id", "=", environmentId)
+        .execute();
+
+      return result.map((row) => ({
+        id: row.user_task_execution_id,
+        title: row.user_task_execution_title,
+        assignee: row.user_task_execution_assignee,
+        createdAt: row.user_task_execution_created_on,
+
+        workflow: {
+          instanceId: row.instance_id,
+          id: row.workflow_id,
+          name: row.workflow_name,
+          version: row.workflow_version,
+        },
+      }));
+    } catch (err) {
+      throw new RepositoryError("Find all pending user tasks failed", err);
+    }
+  },
+
+  findByIdAndEnvironmentIdWithRelations: async (
+    id: string,
+    environmentId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<
+    | {
+        userTaskExecution: UserTaskExecutionModel;
+        node: NodeModel;
+        workflow: WorkflowDetailsForUserTask;
+      }
+    | undefined
+  > => {
+    const result = await (transaction ?? db)
+      .selectFrom("user_task_execution")
+      .innerJoin("task", "task.id", "user_task_execution.task_id")
+      .innerJoin("instance", "instance.id", "task.instance_id")
+      .innerJoin(
+        "workflow_version",
+        "workflow_version.id",
+        "instance.workflow_version_id",
+      )
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .innerJoin("environment", "environment.id", "workflow.environment_id")
+      .innerJoin("node", "node.id", "task.node_id")
+      .select((eb) => [
+        eb.ref("user_task_execution.id").as("user_task_execution_id"),
+        eb.ref("user_task_execution.task_id").as("user_task_execution_task_id"),
+        eb
+          .ref("user_task_execution.started_on")
+          .as("user_task_execution_started_on"),
+        eb
+          .ref("user_task_execution.ended_on")
+          .as("user_task_execution_ended_on"),
+        eb.ref("user_task_execution.status").as("user_task_execution_status"),
+        eb.ref("user_task_execution.title").as("user_task_execution_title"),
+        eb
+          .ref("user_task_execution.assignee")
+          .as("user_task_execution_assignee"),
+        eb
+          .ref("user_task_execution.request_variables")
+          .as("user_task_execution_request_variables"),
+        eb
+          .ref("user_task_execution.response_variables")
+          .as("user_task_execution_response_variables"),
+        eb
+          .ref("user_task_execution.created_on")
+          .as("user_task_execution_created_on"),
+
+        eb.ref("node.id").as("node_id"),
+        eb.ref("node.client_id").as("node_client_id"),
+        eb.ref("node.workflow_version_id").as("node_workflow_version_id"),
+        eb.ref("node.name").as("node_name"),
+        eb.ref("node.type").as("node_type"),
+        eb.ref("node.max_attempts").as("node_max_attempts"),
+        eb.ref("node.input_schema").as("node_input_schema"),
+        eb.ref("node.output_schema").as("node_output_schema"),
+        eb.ref("node.configuration").as("node_configuration"),
+        eb.ref("node.description").as("node_description"),
+        eb.ref("node.x_coordinate").as("node_x_coordinate"),
+        eb.ref("node.y_coordinate").as("node_y_coordinate"),
+        eb.ref("node.created_on").as("node_created_on"),
+        eb.ref("node.created_by").as("node_created_by"),
+        eb.ref("node.modified_on").as("node_modified_on"),
+        eb.ref("node.modified_by").as("node_modified_by"),
+        eb.ref("node.is_deleted").as("node_is_deleted"),
+        eb.ref("node.deleted_on").as("node_deleted_on"),
+        eb.ref("node.deleted_by").as("node_deleted_by"),
+
+        eb.ref("task.instance_id").as("instance_id"),
+        eb.ref("workflow.id").as("workflow_id"),
+        eb.ref("workflow.name").as("workflow_name"),
+        eb.ref("workflow_version.version").as("workflow_version"),
+      ])
+      .where("environment.id", "=", environmentId)
+      .where("user_task_execution.id", "=", id)
+      .executeTakeFirst();
+
+    if (!result) {
+      return;
+    }
+
+    return {
+      userTaskExecution: {
+        id: result.user_task_execution_id,
+        task_id: result.user_task_execution_task_id,
+        started_on: result.user_task_execution_started_on,
+        ended_on: result.user_task_execution_ended_on,
+        status: result.user_task_execution_status,
+        title: result.user_task_execution_title,
+        assignee: result.user_task_execution_assignee,
+        request_variables: result.user_task_execution_request_variables,
+        response_variables: result.user_task_execution_response_variables,
+        created_on: result.user_task_execution_created_on,
+      },
+
+      node: {
+        id: result.node_id,
+        client_id: result.node_client_id,
+        workflow_version_id: result.node_workflow_version_id,
+        name: result.node_name,
+        type: result.node_type,
+        max_attempts: result.node_max_attempts,
+        input_schema: result.node_input_schema,
+        output_schema: result.node_output_schema,
+        configuration: result.node_configuration,
+        description: result.node_description,
+        x_coordinate: result.node_x_coordinate,
+        y_coordinate: result.node_y_coordinate,
+        created_on: result.node_created_on,
+        created_by: result.node_created_by,
+        modified_on: result.node_modified_on,
+        modified_by: result.node_modified_by,
+        is_deleted: result.node_is_deleted,
+        deleted_on: result.node_deleted_on,
+        deleted_by: result.node_deleted_by,
+      },
+
+      workflow: {
+        id: result.workflow_id,
+        name: result.workflow_name,
+        version: result.workflow_version,
+        instanceId: result.instance_id,
+      },
+    };
+  },
+};

@@ -1,6 +1,10 @@
 import { db } from "../database.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
-import { WorkflowVersionStatuses } from "../types/enums.js";
+import {
+  FeelDataType,
+  NodeTypes,
+  WorkflowVersionStatuses,
+} from "../types/enums.js";
 import type { WorkflowVersionModel } from "../types/models.js";
 import { edgeService } from "./edge.services.js";
 import { nodeService } from "./node.services.js";
@@ -17,6 +21,8 @@ import { workflowValidatorService } from "./workflowValidator.service.js";
 import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
+import { nodeSchemaService } from "./nodeSchema.service.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 
@@ -51,12 +57,36 @@ export const workflowVersionService = {
     const nodeModels = await nodeService.getByWorkflowVersion(workflowVersion);
     const edgeModels = await edgeService.getByNodes(nodeModels);
 
-    const nodes = nodeModels.map((node) => nodeService.toNodeSchema(node));
+    const nodes = nodeModels.map((node) =>
+      nodeSchemaService.getNodeSchema(node),
+    );
     const edges = edgeModels.map((edge) =>
       edgeService.toEdgeSchema(edge, nodeModels),
     );
 
-    return { workflowVersion, nodes, edges };
+    const startVariables: { jsonPath: string; dataType: FeelDataType }[] = [];
+    const startNode = nodes.find((node) => node.type === NodeTypes.START);
+    if (
+      !startNode &&
+      workflowVersion.status !== WorkflowVersionStatuses.DRAFT
+    ) {
+      throw new DataIntegrityError(
+        `Workflow version id = ${workflowVersion.id} does not have start node for its status = ${workflowVersion.status}`,
+      );
+    }
+
+    if (startNode) {
+      startNode.configuration.inputDataMap.forEach((data) => {
+        if (!data.fetchableId) {
+          startVariables.push({
+            jsonPath: data.jsonPath,
+            dataType: data.dataType,
+          });
+        }
+      });
+    }
+
+    return { workflowVersion, nodes, edges, startVariables };
   },
 
   update: async (data: UpdateVersionInput): Promise<WorkflowVersionModel> => {
@@ -69,8 +99,8 @@ export const workflowVersionService = {
         );
 
       if (
-        workflowVersion.status !== WorkflowVersionStatuses.DRAFT &&
-        workflowVersion.status !== WorkflowVersionStatuses.VALID
+        workflowVersion.status === WorkflowVersionStatuses.PUBLISHED ||
+        workflowVersion.status === WorkflowVersionStatuses.ACTIVE
       ) {
         throw new StateTransitionError(
           `Workflow version ${data.version} cannot be updated because it is in ${workflowVersion.status} status`,
@@ -178,27 +208,26 @@ export const workflowVersionService = {
   },
 
   changeStatus: async (data: StatusPartialUpdateInput) => {
+    let workflowVersion =
+      await workflowVersionRepository.findByWorkflowIdAndVersion(
+        data.workflowId,
+        data.version,
+      );
+
+    const currentStatus = workflowVersion.status;
+    const newStatus = data.status;
+
+    if (currentStatus === WorkflowVersionStatuses.DRAFT) {
+      throw new StateTransitionError(
+        "Invalid workflow version state transition from DRAFT",
+      );
+    }
+
+    if (currentStatus === newStatus) {
+      return workflowVersion;
+    }
+
     return db.transaction().execute(async (transaction) => {
-      let workflowVersion =
-        await workflowVersionRepository.findByWorkflowIdAndVersion(
-          data.workflowId,
-          data.version,
-          transaction,
-        );
-
-      const currentStatus = workflowVersion.status;
-      const newStatus = data.status;
-
-      if (currentStatus === WorkflowVersionStatuses.DRAFT) {
-        throw new StateTransitionError(
-          "Invalid workflow version state transition from DRAFT",
-        );
-      }
-
-      if (currentStatus === newStatus) {
-        return workflowVersion;
-      }
-
       if (newStatus === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
           data.workflowId,

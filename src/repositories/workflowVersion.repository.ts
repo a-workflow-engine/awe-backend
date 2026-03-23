@@ -4,7 +4,11 @@ import {
   type Transaction,
   type Updateable,
 } from "kysely";
-import type { DB, WorkflowVersion } from "../types/database.js";
+import type {
+  DB,
+  WorkflowVersion,
+  WorkflowVersionStatus,
+} from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type { WorkflowVersionModel } from "../types/models.js";
@@ -12,12 +16,17 @@ import { WorkflowVersionStatuses } from "../types/enums.js";
 
 export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 export type UpdateWorkflowVersion = Updateable<WorkflowVersion>;
-export type NewWorkflowVersionWithoutVersion = Omit<
-  NewWorkflowVersion,
-  "version"
->;
 
 export const workflowVersionRepository = {
+  findById: async (id: string) => {
+    return await db
+      .selectFrom("workflow_version")
+      .selectAll()
+      .where("id", "=", id)
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
   findByWorkflowId: async (
     id: string,
     transaction?: Transaction<DB>,
@@ -72,7 +81,13 @@ export const workflowVersionRepository = {
   },
 
   insertNextVersion: async (
-    data: NewWorkflowVersionWithoutVersion,
+    data: {
+      description: string | null;
+      created_by: string;
+      modified_by: string;
+      status: WorkflowVersionStatus;
+      workflow_id: string;
+    },
     transaction?: Transaction<DB>,
   ) => {
     try {

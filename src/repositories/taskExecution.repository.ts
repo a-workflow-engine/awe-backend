@@ -16,6 +16,16 @@ export type TaskExecutionWithNode = TaskExecutionModel & {
 };
 
 export const taskExecutionRepository = {
+  findLatestByTaskId: async (taskId: string) => {
+    return await db
+      .selectFrom("task_execution")
+      .selectAll()
+      .where("task_id", "=", taskId)
+      .orderBy("started_on", "desc")
+      .limit(1)
+      .executeTakeFirst();
+  },
+
   insert: async (
     data: NewTaskExecution,
     transaction?: Transaction<DB>,

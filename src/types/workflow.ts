@@ -36,3 +36,8 @@ export type Edge = z.infer<typeof EdgeSchema>;
 
 export type StartNode = Extract<Node, { type: "start" }>;
 
+export type NodeInputSchema = {
+  variableNames: string[];
+};
+
+export type NodeOuputSchema = NodeInputSchema;

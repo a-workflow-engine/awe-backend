@@ -19,6 +19,20 @@ export const nodeRepository = {
       .executeTakeFirst();
   },
 
+  findByIds: async (
+    ids: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<NodeModel[]> => {
+    if (ids.length === 0) return [];
+
+    return await (transaction ?? db)
+      .selectFrom("node")
+      .selectAll()
+      .where("id", "in", ids)
+      .where("is_deleted", "=", false)
+      .execute();
+  },
+
   findByWorkflowVersionId: async (
     id: string,
     transaction?: Transaction<DB>,

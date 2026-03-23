@@ -9,7 +9,9 @@ import {
 import { NodeTypes } from "../types/enums.js";
 import { AppError } from "../errors/AppError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { nodeService } from "./node.services.js";
+import { nodeSchemaService } from "./nodeSchema.service.js";
+import { converterUtils } from "../utils/converter.utils.js";
+import { EdgeSchema } from "../schemas/node.schema.js";
 
 const findNodesByEdge = (
   nodes: NodeModel[],
@@ -94,7 +96,7 @@ const getConditionExpressionForEdge = (
 };
 
 const getRuleIdForEdge = (sourceNode: NodeModel, edge: EdgeModel) => {
-  const sourceNodeSchema = nodeService.toNodeSchema(sourceNode);
+  const sourceNodeSchema = nodeSchemaService.getNodeSchema(sourceNode);
   if (sourceNodeSchema.type !== NodeTypes.DECISION) {
     return null;
   }
@@ -148,13 +150,13 @@ export const edgeService = {
   toEdgeSchema: (edge: EdgeModel, nodes: NodeModel[]): Edge => {
     const [sourceNode, destinationNode] = findNodesByEdgeModel(nodes, edge);
 
-    return {
+    return converterUtils.parseOrThrow(EdgeSchema, {
       id: edge.client_id,
       label: edge.name,
       sourceNodeId: sourceNode.client_id,
       targetNodeId: destinationNode?.client_id ?? null,
       ruleId: getRuleIdForEdge(sourceNode, edge),
-    };
+    });
   },
 
   getByNodes: async (nodes: NodeModel[]): Promise<EdgeModel[]> => {
@@ -182,7 +184,7 @@ export const edgeService = {
     return await edgeRepository.findBySourceNodeId(nodeId, transaction);
   },
 
-  getNextNodeIdsBySourceNodeId: async (
+  getDestinationNodeIdsBySourceNodeId: async (
     nodeId: string,
     transaction?: Transaction<DB>,
   ): Promise<string[]> => {

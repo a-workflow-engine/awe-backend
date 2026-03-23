@@ -20,7 +20,7 @@ export interface ContextVariables {
 
 export interface ExecutorResult {
   status: TaskStatus;
-  outputVariables: Record<string, unknown> | ContextVariables; // variableName: value
+  outputVariables: Record<string, unknown>; // variableName: value
   error?: string;
   nextNodeId: string | null;
 }

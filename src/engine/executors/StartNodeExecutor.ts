@@ -12,6 +12,7 @@ import type {
   FetchableSettings,
   UrlSettings,
 } from "../../types/engine.js";
+import { contextUtils } from "../../utils/context.utils.js";
 
 export class StartNodeExecutor extends BaseExecutor {
   async execute(
@@ -33,7 +34,7 @@ export class StartNodeExecutor extends BaseExecutor {
     let fetchables: Record<string, FetchableSettings> = {};
     let urls: Record<string, UrlSettings> = {};
 
-    const outputVariables: ContextVariables = { constants, fetchables, urls };
+    const outputVariables = { constants, fetchables, urls };
 
     for (const dataMap of configuration.inputDataMap) {
       if (dataMap.fetchableId) {
@@ -65,7 +66,8 @@ export class StartNodeExecutor extends BaseExecutor {
         continue;
       }
 
-      const value = inputJson[dataMap.jsonPath];
+      const value = contextUtils.getByPath(inputJson, dataMap.jsonPath);
+
       if (value === undefined) {
         return {
           status: TaskStatuses.FAILED,
@@ -124,7 +126,9 @@ export class StartNodeExecutor extends BaseExecutor {
       constants[dataMap.contextVariableName] = value;
     }
 
-    const [nextNode] = await edgeService.getNextNodeIdsBySourceNodeId(node.id);
+    const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
+      node.id,
+    );
 
     return {
       status: TaskStatuses.COMPLETED,

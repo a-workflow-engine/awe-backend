@@ -6,17 +6,14 @@ import type {
 } from "../types/models.js";
 import type { Node } from "../types/workflow.js";
 import type { DB } from "../types/database.js";
-import { nodeRepository } from "../repositories/node.repository.js";
+import {
+  nodeRepository,
+  type NewNode,
+} from "../repositories/node.repository.js";
 import { NodeTypes } from "../types/enums.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import {
-  DecisionNodeConfigurationSchema,
-  EndNodeConfigurationSchema,
-  ScriptNodeConfigurationSchema,
-  ServiceNodeConfigurationSchema,
-  StartNodeConfigurationSchema,
-  UserNodeConfigurationSchema,
-} from "../schemas/node.schema.js";
+import { nodeSchemaService } from "./nodeSchema.service.js";
+import { converterUtils } from "../utils/converter.utils.js";
 
 export const nodeService = {
   createMany: async (
@@ -24,8 +21,12 @@ export const nodeService = {
     actor: ActorModel,
     workflowVersion: WorkflowVersionModel,
     transaction?: Transaction<DB>,
-  ) => {
-    const nodes = data.map((node) => {
+  ): Promise<NodeModel[]> => {
+    if (data.length === 0) {
+      return [];
+    }
+
+    const nodes: NewNode[] = data.map((node) => {
       const maxAttempts =
         node.type === NodeTypes.START ||
         node.type === NodeTypes.END ||
@@ -33,9 +34,12 @@ export const nodeService = {
           ? 1
           : node.configuration.maxAttempts;
 
+      const { inputSchema, outputSchema } =
+        nodeSchemaService.getInputOutputSchemas(node);
+
       return {
         client_id: node.id,
-        configuration: JSON.stringify(node.configuration),
+        configuration: converterUtils.objectToJsonValue(node.configuration),
         created_by: actor.id,
         description: node.description ?? null,
         is_deleted: false,
@@ -46,72 +50,12 @@ export const nodeService = {
         workflow_version_id: workflowVersion.id,
         x_coordinate: node.position?.x ?? null,
         y_coordinate: node.position?.y ?? null,
+        input_schema: converterUtils.objectToJsonValue(inputSchema),
+        output_schema: converterUtils.objectToJsonValue(outputSchema),
       };
     });
 
     return await nodeRepository.insertMany(nodes, transaction);
-  },
-
-  toNodeSchema: (node: NodeModel): Node => {
-    const base = {
-      id: node.client_id,
-      label: node.name,
-      description: node.description,
-      position:
-        node.x_coordinate && node.y_coordinate
-          ? { x: node.x_coordinate, y: node.y_coordinate }
-          : null,
-    };
-
-    switch (node.type) {
-      case NodeTypes.START:
-        return {
-          ...base,
-          type: NodeTypes.START,
-          configuration: StartNodeConfigurationSchema.parse(node.configuration),
-        };
-
-      case NodeTypes.USER:
-        return {
-          ...base,
-          type: NodeTypes.USER,
-          configuration: UserNodeConfigurationSchema.parse(node.configuration),
-        };
-
-      case NodeTypes.SERVICE:
-        return {
-          ...base,
-          type: NodeTypes.SERVICE,
-          configuration: ServiceNodeConfigurationSchema.parse(
-            node.configuration,
-          ),
-        };
-
-      case NodeTypes.SCRIPT:
-        return {
-          ...base,
-          type: NodeTypes.SCRIPT,
-          configuration: ScriptNodeConfigurationSchema.parse(
-            node.configuration,
-          ),
-        };
-
-      case NodeTypes.DECISION:
-        return {
-          ...base,
-          type: NodeTypes.DECISION,
-          configuration: DecisionNodeConfigurationSchema.parse(
-            node.configuration,
-          ),
-        };
-
-      case NodeTypes.END:
-        return {
-          ...base,
-          type: NodeTypes.END,
-          configuration: EndNodeConfigurationSchema.parse(node.configuration),
-        };
-    }
   },
 
   getByWorkflowVersion: async (
@@ -134,14 +78,6 @@ export const nodeService = {
     );
   },
 
-  getById: async (
-    nodeId: string,
-    transaction?: Transaction<DB>,
-  ): Promise<NodeModel | null> => {
-    const node = await nodeRepository.findById(nodeId, transaction);
-    return node ?? null;
-  },
-
   getByStartNodeByWorkflowVersionIdOrThrow: async (
     workflowVersionId: string,
     transaction?: Transaction<DB>,
@@ -159,5 +95,9 @@ export const nodeService = {
     }
 
     return nodes[0];
+  },
+
+  getById: async (id: string, transaction?: Transaction<DB>) => {
+    return await nodeRepository.findById(id, transaction);
   },
 };

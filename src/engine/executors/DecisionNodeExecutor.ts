@@ -8,9 +8,8 @@ import { StateTransitionError } from "../../errors/StateTransitionError.js";
 import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { evaluate } from "@bpmn-io/feelin";
-import { buildFeelContext } from "../../utils/contextResolver.js";
 import { edgeService } from "../../services/edge.services.js";
-import { nodeService } from "../../services/node.services.js";
+import { contextUtils } from "../../utils/context.utils.js";
 
 const normalizeExpression = (expr: string): string => {
   return expr.replace(/\s+/g, " ").trim();
@@ -41,7 +40,7 @@ export class DecisionNodeExecutor extends BaseExecutor {
       );
     }
 
-    const feelContext = await buildFeelContext(inputVariables);
+    const feelContext = await contextUtils.buildFeelContext(inputVariables);
 
     let matchedEdge: EdgeModel | null = null;
 

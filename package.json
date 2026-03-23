@@ -9,6 +9,7 @@
     "start": "node --env-file=.env dist/index.js",
     "codegen": "kysely-codegen --dialect postgres --out-file src/types/database.ts",
     "tokengen": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    "typechecker": "npx tsc --noEmit",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

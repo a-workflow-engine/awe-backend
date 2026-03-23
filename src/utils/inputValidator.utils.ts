@@ -1,7 +1,7 @@
 import { FeelDataType } from "../types/enums.js";
 import { evaluate } from "@bpmn-io/feelin";
-import { buildFeelContext } from "./contextResolver.js";
 import type { ContextVariables } from "../types/engine.js";
+import { contextUtils } from "./context.utils.js";
 
 export type InputValidationResult = {
   valid: boolean;
@@ -26,7 +26,6 @@ const EMPTY_CONTEXT: ContextVariables = {
   fetchables: {},
   urls: {},
 };
-
 
 export function validateDataType(
   value: unknown,
@@ -126,11 +125,7 @@ export function validateDataType(
       return { valid: true, value };
 
     case FeelDataType.OBJECT:
-      if (
-        typeof value !== "object" ||
-        value === null ||
-        Array.isArray(value)
-      ) {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return {
           valid: false,
           error: `Field '${fieldName}' must be an object`,
@@ -142,7 +137,6 @@ export function validateDataType(
       return { valid: true, value };
   }
 }
-
 
 export function validateField(
   input: Record<string, unknown>,
@@ -169,7 +163,6 @@ export function validateField(
   return validateDataType(value, expectedType, fieldKey);
 }
 
-
 export async function evaluateValidationExpression(
   validationExpression: string,
   fieldValue: unknown,
@@ -177,16 +170,7 @@ export async function evaluateValidationExpression(
   contextVariables: ContextVariables = EMPTY_CONTEXT,
 ): Promise<InputValidationResult> {
   try {
-    const augmentedContext: ContextVariables = {
-      ...contextVariables,
-      constants: {
-        ...contextVariables.constants,
-        value: fieldValue,
-        [fieldName]: fieldValue,
-      },
-    };
-
-    const feelContext = await buildFeelContext(augmentedContext);
+    const feelContext = await contextUtils.buildFeelContext(contextVariables);
 
     const result = evaluate(validationExpression, feelContext);
 
@@ -213,7 +197,6 @@ export async function evaluateValidationExpression(
     };
   }
 }
-
 
 export type InputFieldConfig = {
   jsonPath: string;
@@ -251,16 +234,13 @@ function checkUnexpectedFields(
   return errors;
 }
 
-
 export function validateInstanceInput(
   input: Record<string, unknown>,
   inputDataMap: InputFieldConfig[],
 ): FieldValidationError[] {
   const errors: FieldValidationError[] = [];
 
-  const nonFetchableFields = inputDataMap.filter(
-    (field) => !field.fetchableId,
-  );
+  const nonFetchableFields = inputDataMap.filter((field) => !field.fetchableId);
 
   const expectedFields = new Set(
     nonFetchableFields.map((field) => field.jsonPath),
@@ -290,7 +270,6 @@ export function validateInstanceInput(
   return errors;
 }
 
-
 export async function validateUserTaskInput(
   userInput: Record<string, unknown>,
   responseMap: ResponseFieldConfig[],
@@ -309,8 +288,7 @@ export async function validateUserTaskInput(
       userInput,
       field.fieldId,
       field.type as FeelDataType,
-      field.required ?? false,
-      field.default,
+      true,
     );
 
     if (!typeResult.valid && typeResult.error) {
