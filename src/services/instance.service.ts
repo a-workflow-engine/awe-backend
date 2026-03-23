@@ -115,7 +115,7 @@ export const instanceService = {
     }
 
     db.transaction().execute(async (transaction) => {
-      await executionEngine.createNewTask(nextNode, instance, transaction);
+      await executionEngine.createNextTask(nextNode, instance, transaction);
     });
 
     const updatedInstance = await instanceRepository.findById(instanceId);

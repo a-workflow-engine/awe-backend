@@ -1,9 +1,6 @@
 import type { Request, Response } from "express";
 import { userTaskService } from "../services/userTask.service.js";
-import {
-  TaskParamsSchema,
-  TaskCompleteSchema,
-} from "../schemas/task.schema.js";
+import { UserTaskParamsSchema } from "../schemas/task.schema.js";
 
 export const userTaskController = {
   list: async (req: Request, res: Response) => {
@@ -12,18 +9,21 @@ export const userTaskController = {
   },
 
   getTask: async (req: Request, res: Response) => {
-    const { taskId } = TaskParamsSchema.parse(req.params);
+    const { taskId } = UserTaskParamsSchema.parse(req.params);
     const task = await userTaskService.get(taskId, req.actor);
     return res.json({ ...task });
   },
 
   completeUserTask: async (req: Request, res: Response) => {
-    const { taskId } = TaskParamsSchema.parse(req.params);
-    const { userInput } = TaskCompleteSchema.parse(req.body);
-    const execution = await userTaskService.completeUserTask(taskId, userInput, req.actor);
+    const { taskId } = UserTaskParamsSchema.parse(req.params);
+    const execution = await userTaskService.completeUserTask(
+      taskId,
+      req.body ?? {},
+      req.actor,
+    );
     return res.json({
       status: execution.status,
-      completedAt: execution.ended_on
+      completedAt: execution.ended_on,
     });
   },
 };

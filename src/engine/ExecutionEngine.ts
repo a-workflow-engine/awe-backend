@@ -160,11 +160,9 @@ export const executionEngine = {
         transaction,
       );
 
-      if (!instance.auto_advance) {
-        return instance;
+      if (instance.auto_advance) {
+        await executionEngine.createNextTask(startNode, instance, transaction);
       }
-
-      await executionEngine.createNewTask(startNode, instance, transaction);
 
       return instance;
     });
@@ -185,6 +183,8 @@ export const executionEngine = {
         `Task is not ${TaskStatuses.IN_PROGRESS}. Cannot execute task id = ${taskId}`,
       );
     }
+
+    console.log("Executing:", node.type);
 
     let executionThrew = false;
     const executor = executors[node.type];
@@ -303,8 +303,8 @@ export const executionEngine = {
           instanceUpdateCallback,
         ]);
 
-      if (nextNode) {
-        await executionEngine.createNewTask(
+      if (nextNode && instance.auto_advance) {
+        await executionEngine.createNextTask(
           nextNode,
           updatedInstance,
           transaction,
@@ -313,7 +313,7 @@ export const executionEngine = {
     });
   },
 
-  createNewTask: async (
+  createNextTask: async (
     node: NodeModel,
     instance: InstanceModel,
     transaction: Transaction<DB>,

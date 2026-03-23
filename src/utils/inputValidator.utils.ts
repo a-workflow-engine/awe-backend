@@ -288,8 +288,7 @@ export async function validateUserTaskInput(
       userInput,
       field.fieldId,
       field.type as FeelDataType,
-      field.required ?? false,
-      field.default,
+      true,
     );
 
     if (!typeResult.valid && typeResult.error) {

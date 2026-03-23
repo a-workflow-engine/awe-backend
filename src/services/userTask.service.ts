@@ -118,7 +118,6 @@ export const userTaskService = {
         value: contextUtils.getEvaluatedValue(
           data.valueExpression,
           evaluatedContext,
-          "unknowm",
         ),
       };
     });
@@ -225,7 +224,7 @@ export const userTaskService = {
     );
 
     return await db.transaction().execute(async (transaction) => {
-      await instanceService.updateContext(
+      const updatedInstance = await instanceService.updateContext(
         instance.id,
         instance.auto_advance
           ? InstanceStatuses.IN_PROGRESS
@@ -262,7 +261,11 @@ export const userTaskService = {
       }
 
       if (instance.auto_advance) {
-        await executionEngine.createNewTask(nextNode, instance, transaction);
+        await executionEngine.createNextTask(
+          nextNode,
+          updatedInstance,
+          transaction,
+        );
       }
 
       return returnUserTask;

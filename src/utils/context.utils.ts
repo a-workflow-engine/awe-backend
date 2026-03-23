@@ -104,15 +104,15 @@ export const contextUtils = {
   getEvaluatedValue<T extends keyof DataTypeMap>(
     expression: string,
     context: Record<string, unknown>,
-    dataType: T,
+    dataType?: T,
   ): DataTypeMap[T] {
     const result = evaluate(expression, context);
 
-    if (!result || result.warnings) {
+    if (!result || result.warnings.length > 0) {
       throw new DataIntegrityError(`Invalid FEEL expression ${expression}`);
     }
 
-    if (!isValidType(result.value, dataType)) {
+    if (dataType && !isValidType(result.value, dataType)) {
       throw new DataIntegrityError(
         `Invalid FEEL expression ${expression}, expected ${dataType}, got ${typeof result.value}`,
       );
