@@ -1,9 +1,9 @@
-import { fetchService } from "../services/fetch.service.js";
 import type { ContextVariables } from "../types/engine.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { EngineError } from "../errors/EngineError.js";
+import { httpRequestService } from "../services/httpRequest.service.js";
 
 type DataTypeMap = {
   string: string;
@@ -85,7 +85,7 @@ export const contextUtils = {
           headers[key] = result.value;
         }
 
-        fetchedResponses[urlId] = await fetchService.get(
+        fetchedResponses[urlId] = await httpRequestService.get(
           result.value,
           urlSettings.headers,
         );

@@ -7,6 +7,11 @@ export const instanceRouter = Router();
 instanceRouter.get("/", authenticateRequest, instanceController.list);
 instanceRouter.post("/", authenticateRequest, instanceController.create);
 instanceRouter.get("/:instanceId", authenticateRequest, instanceController.get);
+instanceRouter.get(
+  "/:instanceId/executions",
+  authenticateRequest,
+  instanceController.getExecutionLogs,
+);
 instanceRouter.post(
   "/:instanceId/advance",
   authenticateRequest,

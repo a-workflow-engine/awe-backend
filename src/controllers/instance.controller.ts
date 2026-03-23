@@ -4,6 +4,8 @@ import {
   InstanceCreateSchema,
   InstanceParamsSchema,
 } from "../schemas/instance.schema.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 
 export const instanceController = {
   list: async (req: Request, res: Response) => {
@@ -67,5 +69,25 @@ export const instanceController = {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     await instanceService.advanceInstance(instanceId, req.actor);
     return res.json({});
+  },
+
+  getExecutionLogs: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+
+    const instance = await instanceService.getById(instanceId, req.actor.id);
+    if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
+
+    const executions = await taskExecutionRepository.findByInstanceId(instanceId);
+    return res.json({ executions });
+  },
+
+  getExecutionLogs: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+
+    const instance = await instanceService.getById(instanceId, req.actor.id);
+    if (!instance) throw new NotFoundError(`Instance id=${instanceId} not found`);
+
+    const executions = await taskExecutionRepository.findByInstanceId(instanceId);
+    return res.json({ executions });
   },
 };
