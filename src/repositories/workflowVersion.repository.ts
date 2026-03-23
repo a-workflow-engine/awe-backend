@@ -143,4 +143,22 @@ export const workflowVersionRepository = {
       .where("is_deleted", "=", false)
       .execute();
   },
+
+  doesDraftOrValidVersionExists: async (
+    workflowId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<boolean> => {
+    const result = await (transaction ?? db)
+      .selectFrom("workflow_version")
+      .select(sql<number>`count(*)`.as("count"))
+      .where("workflow_id", "=", workflowId)
+      .where("status", "in", [
+        WorkflowVersionStatuses.DRAFT,
+        WorkflowVersionStatuses.VALID,
+      ])
+      .where("is_deleted", "=", false)
+      .executeTakeFirst();
+    
+    return result ? result.count > 0 : false;
+  },
 };

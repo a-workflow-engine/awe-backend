@@ -20,6 +20,7 @@ import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { workflowValidatorService } from "./workflowValidator.service.js";
 import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
+import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
@@ -145,6 +146,18 @@ export const workflowVersionService = {
     data: CreateVersionInput,
   ): Promise<WorkflowVersionModel> => {
     return db.transaction().execute(async (transaction) => {
+      
+      const doesDraftOrValidVersionExists = await workflowVersionRepository.doesDraftOrValidVersionExists(
+        data.workflowId,
+        transaction,
+      );
+
+      if (doesDraftOrValidVersionExists) {
+        throw new InvalidOperationError(
+          "DRAFT or VALID version already exists for this workflow.",
+        );
+      }
+
       const workflowVersion = await workflowVersionRepository.insertNextVersion(
         {
           description: data.description ?? null,
