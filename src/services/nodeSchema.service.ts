@@ -131,6 +131,13 @@ export const nodeSchemaService = {
       );
     });
 
+    if (configuration.assignee) {
+      nodeSchemaService._updateNameSetForExpression(
+        inputVariableSet,
+        configuration.assignee,
+      );
+    }
+
     configuration.responseMap.forEach((data) => {
       outputVariableSet.add(data.contextVariableName);
     });
