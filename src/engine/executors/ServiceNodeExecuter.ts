@@ -10,6 +10,7 @@ import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { httpRequestService } from "../../services/httpRequest.service.js";
 import { contextUtils } from "../../utils/context.utils.js";
+import { isStaticUrl } from "../../utils/feel.utils.js";
 
 function getByPath(data: unknown, path: string): unknown {
   const parts = path.split(".").filter(Boolean);
@@ -38,17 +39,24 @@ export class ServiceNodeExecutor extends BaseExecutor {
     const configuration = parsed.data;
 
     const feelContext = await contextUtils.buildFeelContext(inputVariables);
+    
+    const trimmedUrlExpression = configuration.urlExpression.trim();
+    let url: string;
 
-    const urlResult = evaluate(configuration.urlExpression, feelContext);
-    if (
-      urlResult.warnings.length !== 0 ||
-      typeof urlResult.value !== "string"
-    ) {
-      throw new DataIntegrityError(
-        `Invalid URL expression "${configuration.urlExpression}" in service node id=${node.id}`,
-      );
+    if (isStaticUrl(trimmedUrlExpression)) {
+      url = trimmedUrlExpression;
+    } else {
+      const urlResult = evaluate(trimmedUrlExpression, feelContext);
+      if (
+        urlResult.warnings.length !== 0 ||
+        typeof urlResult.value !== "string"
+      ) {
+        throw new DataIntegrityError(
+          `Invalid URL expression "${configuration.urlExpression}" in service node id=${node.id}`,
+        );
+      }
+      url = urlResult.value;
     }
-    const url = urlResult.value;
 
     const headers: Record<string, string> = {};
     if (configuration.headers) {
@@ -101,7 +109,7 @@ export class ServiceNodeExecutor extends BaseExecutor {
     }
 
     let responseBody: unknown;
-    try {
+    // try {
       switch (configuration.method) {
         case "GET":
           responseBody = await httpRequestService.get(url, headers);
@@ -135,18 +143,18 @@ export class ServiceNodeExecutor extends BaseExecutor {
             `Unsupported HTTP method "${configuration.method}" in service node id=${node.id}`,
           );
       }
-    } catch (error) {
-      const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
-        node.id,
-        transaction,
-      );
+    // } catch (error) {
+    //   const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
+    //     node.id,
+    //     transaction,
+    //   );
 
-      return {
-        status: TaskStatuses.COMPLETED,
-        outputVariables: {},
-        nextNodeId: nextNode ?? null,
-      };
-    }
+    //   return {
+    //     status: TaskStatuses.COMPLETED,
+    //     outputVariables: {},
+    //     nextNodeId: nextNode ?? null,
+    //   };
+    // }
 
     const outputVariables: Record<string, unknown> = {};
     for (const responseItem of configuration.responseMap) {
@@ -158,7 +166,7 @@ export class ServiceNodeExecutor extends BaseExecutor {
       node.id,
       transaction,
     );
-
+    console.log(outputVariables)
     return {
       status: TaskStatuses.COMPLETED,
       outputVariables,

@@ -93,7 +93,9 @@ export const workflowVersionController = {
       ...req.body,
       actor: req.actor,
     });
+    console.log(JSON.stringify(req.body))
     const workflowVersion = await workflowVersionService.update(data);
+    
     return res.status(200).json({
       id: workflowVersion.id,
       workflowId: workflowVersion.workflow_id,

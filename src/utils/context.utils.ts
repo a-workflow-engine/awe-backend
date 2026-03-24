@@ -4,6 +4,7 @@ import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { EngineError } from "../errors/EngineError.js";
 import { httpRequestService } from "../services/httpRequest.service.js";
+import { isStaticUrl } from "./feel.utils.js";
 
 type DataTypeMap = {
   string: string;
@@ -25,6 +26,24 @@ function isValidType(value: unknown, type: keyof DataTypeMap): boolean {
     default:
       return typeof value === type;
   }
+}
+
+function normalizeFeelExpression(expression: string): string {
+  let normalized = expression.trim();
+  let stripped = true;
+
+  while (stripped) {
+    stripped = false;
+    if (
+      (normalized.startsWith('"') && normalized.endsWith('"')) ||
+      (normalized.startsWith("'") && normalized.endsWith("'"))
+    ) {
+      normalized = normalized.slice(1, -1).trim();
+      stripped = true;
+    }
+  }
+
+  return normalized;
 }
 
 export const contextUtils = {
@@ -59,14 +78,23 @@ export const contextUtils = {
       }
 
       if (!(urlId in fetchedResponses)) {
-        const result = evaluate(urlSettings.urlExpression, {
-          context: returnContext,
-        });
+        const trimmedUrlExpression = urlSettings.urlExpression.trim();
+        let resolvedUrl: string;
 
-        if (result.warnings.length !== 0 || typeof result.value !== "string") {
-          throw new DataIntegrityError(
-            `Invalid FEEL expression "${urlSettings.urlExpression}"`,
-          );
+        if (isStaticUrl(trimmedUrlExpression)) {
+          resolvedUrl = trimmedUrlExpression;
+        } else {
+          const result = evaluate(trimmedUrlExpression, {
+            context: returnContext,
+          });
+
+          if (result.warnings.length !== 0 || typeof result.value !== "string") {
+            throw new DataIntegrityError(
+              `Invalid FEEL expression "${urlSettings.urlExpression}"`,
+            );
+          }
+
+          resolvedUrl = result.value;
         }
 
         const headers: Record<string, string> = {};
@@ -86,7 +114,7 @@ export const contextUtils = {
         }
 
         fetchedResponses[urlId] = await httpRequestService.get(
-          result.value,
+          resolvedUrl,
           urlSettings.headers,
         );
       }
