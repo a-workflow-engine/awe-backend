@@ -18,12 +18,24 @@ import { taskRepository } from "../repositories/task.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import { transitionLogService } from "./transitionLog.service.js";
 import { taskService } from "./task.service.js";
+import { workflowService } from "./workflow.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
 export const instanceService = {
   listAll: async (actorId: string): Promise<InstanceListItem[]> => {
     return instanceRepository.findAll(actorId);
+  },
+
+  listPaginated: async (
+    actorId: string,
+    limit: number,
+    offset: number,
+  ): Promise<{
+    items: InstanceListItem[];
+    total: number;
+  }> => {
+    return instanceRepository.findWithPagination(actorId, limit, offset);
   },
 
   createNew: async (data: CreateVersionInput, actor: ActorModel) => {
@@ -95,6 +107,10 @@ export const instanceService = {
       );
     }
 
+    const workflow_name = await workflowService.getWorkflowName(
+      workflowVersion.workflow_id,
+    );
+
     const task = await taskRepository.findLatestByInstanceId(instance.id);
     if (!task) {
       return { instance, workflowVersion, node: null, task: null };
@@ -105,7 +121,7 @@ export const instanceService = {
       throw new DataIntegrityError(`Node does not exist id = ${task.node_id}`);
     }
 
-    return { instance, workflowVersion, node, task };
+    return { instance, workflow_name, workflowVersion, node, task };
   },
 
   advanceInstance: async (instanceId: string, actor: ActorModel) => {
