@@ -24,7 +24,6 @@ import { transitionLogService } from "./transitionLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { contextUtils } from "../utils/context.utils.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
-import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 
 export const taskService = {
   getAllTaskDetails: async (
@@ -53,8 +52,9 @@ export const taskService = {
   create: async (
     node: NodeModel,
     instance: InstanceModel,
+    transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
-    const task = await db.transaction().execute(async (transaction) => {
+    const executeCallback = async (transaction: Transaction<DB>) => {
       const task = await taskRepository.insert(
         {
           instance_id: instance.id,
@@ -70,53 +70,69 @@ export const taskService = {
       );
 
       return task;
-    });
+    };
+
+    const task = transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+
+    if (node.type !== NodeTypes.USER) {
+      return await queueService
+        .enqueue({
+          taskId: task.id,
+        })
+        .then(() => task)
+        .catch(async (err) => {
+          return await taskService.fail(task.id, "Failed to enqueue task.", {
+            err,
+          });
+        });
+    }
+
+    let executionContext;
+    let taskExecution;
 
     try {
-      if (node.type !== NodeTypes.USER) {
-        await queueService.enqueue({
-          taskId: task.id,
-        });
-
-        return task;
-      }
-
-      const executionContext = taskService.getTaskContext(instance, node);
-      await userTaskService.create(node, task, executionContext);
-
-      return task;
+      executionContext = taskService.getTaskContext(instance, node);
+      taskExecution = await taskService.start(task, executionContext);
     } catch (err) {
-      return taskService.fail(task.id, "Failed to create user task.", {});
+      return await taskService.fail(task.id, "Failed to execute task.", {
+        err,
+      });
     }
+
+    return await userTaskService
+      .create(node, taskExecution, executionContext)
+      .then(() => task)
+      .catch(async (err) => {
+        return await taskService.fail(task.id, "Failed to create user task.", {
+          err,
+        });
+      });
   },
 
   start: async (
-    taskId: string,
-    inputVariables: object,
-  ): Promise<TaskExecutionModel | null> => {
-    try {
-      return await db.transaction().execute(async (transaction) => {
-        const taskExecution = await taskExecutionRepository.insert(
-          {
-            task_id: taskId,
-            status: TaskStatuses.IN_PROGRESS,
-            input_variables: converterUtils.objectToJsonValue(inputVariables),
-            started_on: new Date(),
-          },
-          transaction,
-        );
+    task: TaskModel,
+    inputVariables: ContextVariables,
+  ): Promise<TaskExecutionModel> => {
+    return await db.transaction().execute(async (transaction) => {
+      const taskExecution = await taskExecutionRepository.insert(
+        {
+          task_id: task.id,
+          status: TaskStatuses.IN_PROGRESS,
+          input_variables: converterUtils.objectToJsonValue(inputVariables),
+          started_on: new Date(),
+        },
+        transaction,
+      );
 
-        await transitionLogService.createTaskLog(
-          { taskId: taskId, type: TaskTransitionTypes.STARTED },
-          transaction,
-        );
+      await transitionLogService.createTaskLog(
+        { taskId: task.id, type: TaskTransitionTypes.STARTED },
+        transaction,
+      );
 
-        return taskExecution;
-      });
-    } catch (err) {
-      await taskService.fail(taskId, "", {});
-      return null;
-    }
+      return taskExecution;
+    });
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {
@@ -172,8 +188,9 @@ export const taskService = {
     taskId: string,
     message: string,
     details: object,
+    transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
-    return await db.transaction().execute(async (transaction) => {
+    const executeCallback = async (transaction: Transaction<DB>) => {
       const [task] = await Promise.all([
         taskRepository.updateById(
           taskId,
@@ -192,6 +209,10 @@ export const taskService = {
       ]);
 
       return task;
-    });
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
   },
 };

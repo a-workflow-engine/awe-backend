@@ -4,7 +4,7 @@ import type { DB, TaskStatus } from "../types/database";
 import { converterUtils } from "../utils/converter.utils";
 import type { TaskExecutionModel } from "../types/models";
 import { transitionLogService } from "./transitionLog.service";
-import { TaskTransitionTypes } from "../types/enums";
+import { TaskStatuses, TaskTransitionTypes } from "../types/enums";
 import { db } from "../database";
 
 export const taskExecutionService = {
@@ -33,17 +33,14 @@ export const taskExecutionService = {
     });
   },
 
-  end: async (
-    taskId: string,
-    status: TaskStatus,
-    outputVariables: object,
+  fail: async (
+    taskExecutionId: string,
     transaction?: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
     return taskExecutionRepository.updateById(
-      taskId,
+      taskExecutionId,
       {
-        status,
-        output_variables: converterUtils.objectToJsonValue(outputVariables),
+        status: TaskStatuses.FAILED,
         ended_on: new Date(),
       },
       transaction,

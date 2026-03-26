@@ -7,11 +7,7 @@ import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import {
-  TaskStatuses,
-  InstanceStatuses,
-  TaskTransitionTypes,
-} from "../types/enums.js";
+import { TaskStatuses, InstanceStatuses } from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
 import { instanceService } from "./instance.service.js";
 import type { ContextVariables } from "../types/engine.js";
@@ -19,7 +15,7 @@ import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import type {
   ActorModel,
-  TaskModel,
+  TaskExecutionModel,
   UserNodeModel,
   UserTaskExecutionModel,
 } from "../types/models.js";
@@ -27,15 +23,15 @@ import { contextUtils } from "../utils/context.utils.js";
 import { environmentService } from "./environment.services.js";
 import type { PendingUserTaskList } from "../types/userTask.js";
 import { nodeService } from "./node.services.js";
-import { transitionLogService } from "./transitionLog.service.js";
 import { taskService } from "./task.service.js";
+import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 
 export const userTaskService = {
   create: async (
     node: UserNodeModel,
-    task: TaskModel,
+    taskExecution: TaskExecutionModel,
     executionContext: ContextVariables,
-  ) => {
+  ): Promise<UserTaskExecutionModel> => {
     const configObject = converterUtils.jsonValueToObject(node.configuration);
     const configuration = converterUtils.parseOrThrow(
       UserNodeConfigurationSchema,
@@ -54,28 +50,10 @@ export const userTaskService = {
       : null;
     const title = configuration.title ?? null;
 
-    return await db.transaction().execute(async (transaction) => {
-      const userTask = await userTaskExecutionRepository.insert(
-        {
-          status: TaskStatuses.IN_PROGRESS,
-          task_id: task.id,
-          started_on: new Date(),
-          assignee,
-          title,
-          request_variables: converterUtils.objectToJsonValue(executionContext),
-        },
-        transaction,
-      );
-      await transitionLogService.createTaskLog(
-        {
-          taskId: task.id,
-          type: TaskTransitionTypes.STARTED,
-          details: { userTaskExecutionId: userTask.id },
-        },
-        transaction,
-      );
-
-      return userTask;
+    return await userTaskExecutionRepository.insert({
+      task_execution_id: taskExecution.id,
+      assignee,
+      title,
     });
   },
 
@@ -116,10 +94,10 @@ export const userTaskService = {
       throw new NotFoundError("User task");
     }
 
-    const { userTaskExecution, node, workflow } = result;
+    const { userTaskExecution, taskExecution, node, workflow } = result;
 
     const nodeContext = converterUtils.jsonValueToContextVariables(
-      userTaskExecution.request_variables,
+      taskExecution.input_variables,
     );
     const evaluatedContext = await contextUtils.evaluateContext(nodeContext);
 
@@ -148,8 +126,8 @@ export const userTaskService = {
       id: userTaskExecution.id,
       title: userTaskExecution.title,
       assignee: userTaskExecution.assignee,
-      startedAt: userTaskExecution.started_on,
-      status: userTaskExecution.status,
+      startedAt: taskExecution.started_on,
+      status: taskExecution.status,
       requestData,
       responseData,
       workflow,
@@ -160,7 +138,10 @@ export const userTaskService = {
     id: string,
     userInput: Record<string, unknown>,
     actor: ActorModel,
-  ): Promise<UserTaskExecutionModel> => {
+  ): Promise<{
+    userTaskExecution: UserTaskExecutionModel;
+    taskExecution: TaskExecutionModel;
+  }> => {
     const environment = await environmentService.getByActor(actor);
     const result =
       await userTaskExecutionRepository.findByIdAndEnvironmentIdWithRelations(
@@ -172,9 +153,9 @@ export const userTaskService = {
       throw new NotFoundError("User task");
     }
 
-    const { userTaskExecution, node, workflow } = result;
+    const { userTaskExecution, taskExecution, node, workflow } = result;
 
-    if (userTaskExecution.status !== TaskStatuses.IN_PROGRESS) {
+    if (taskExecution.status !== TaskStatuses.IN_PROGRESS) {
       throw new StateTransitionError(
         `Task id=${userTaskExecution.id} is not awaiting user input`,
       );
@@ -197,7 +178,7 @@ export const userTaskService = {
     );
 
     const executionContext = converterUtils.jsonValueToContextVariables(
-      userTaskExecution.request_variables,
+      taskExecution.input_variables,
     );
 
     const validationErrors = await validateUserTaskInput(
@@ -246,17 +227,17 @@ export const userTaskService = {
       );
 
       await taskRepository.updateById(
-        userTaskExecution.task_id,
+        taskExecution.task_id,
         { status: TaskStatuses.COMPLETED },
         transaction,
       );
 
-      const returnUserTask = await userTaskExecutionRepository.updateById(
-        userTaskExecution.id,
+      const returnTaskExecution = await taskExecutionRepository.updateById(
+        taskExecution.id,
         {
           ended_on: new Date(),
           status: TaskStatuses.COMPLETED,
-          response_variables: converterUtils.objectToJsonValue(outputVariables),
+          output_variables: converterUtils.objectToJsonValue(outputVariables),
         },
       );
 
@@ -275,7 +256,7 @@ export const userTaskService = {
         await taskService.create(nextNode, updatedInstance);
       }
 
-      return returnUserTask;
+      return { userTaskExecution, taskExecution: returnTaskExecution };
     });
   },
 };

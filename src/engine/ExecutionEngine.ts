@@ -10,12 +10,19 @@ import { ScriptNodeExecutor } from "./executors/ScriptNodeExecutor.js";
 import { taskService } from "../services/task.service.js";
 import { instanceService } from "../services/instance.service.js";
 import type { DB, InstanceStatus, NodeType } from "../types/database.js";
-import type { InstanceModel, NodeModel } from "../types/models.js";
+import type {
+  InstanceModel,
+  NodeModel,
+  TaskExecutionModel,
+  TaskModel,
+} from "../types/models.js";
 import type { ContextVariables, ExecutorResult } from "../types/engine.js";
 import { nodeService } from "../services/node.services.js";
 import { EngineError } from "../errors/EngineError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import type { Transaction } from "kysely";
+import { AppError } from "../errors/AppError.js";
+import { taskExecutionService } from "../services/taskExecution.service.js";
 
 const executors: Partial<Record<string, BaseExecutor>> = {
   [NodeTypes.START]: new StartNodeExecutor(),
@@ -90,6 +97,163 @@ async function getNextNode(nextNodeId: string, currentNodeType: NodeType) {
   return nextNode;
 }
 
+async function getExecutionDetails(
+  instance: InstanceModel,
+  node: NodeModel,
+  task: TaskModel,
+) {
+  try {
+    const executor = executors[node.type];
+    if (!executor) {
+      throw new EngineError(`Executor for ${node.type} not implemented`);
+    }
+
+    executionEngine.validateInstanceCanExecuteOrThrow(instance);
+
+    const executionContext = taskService.getTaskContext(instance, node);
+
+    const taskExecution = await taskService.start(task, executionContext);
+
+    return { executor, executionContext, taskExecution };
+  } catch (err) {
+    console.error(err);
+    let message = "Unknown error";
+
+    if (err instanceof Error) {
+      message = err.message;
+    }
+
+    await Promise.all([
+      taskService.fail(task.id, "Failed to initialize task execution.", {
+        err,
+      }),
+      instanceService.fail(
+        instance.id,
+        `Failed at node id = ${node.client_id}`,
+        {},
+      ),
+    ]);
+
+    throw err;
+  }
+}
+
+async function resolveInstanceUpdate(
+  instance: InstanceModel,
+  node: NodeModel,
+  result: ExecutorResult,
+): Promise<{
+  nextNode: NodeModel | null;
+  instanceStatus: InstanceStatus;
+  instanceContext: ContextVariables;
+}> {
+  const nextNode = result.nextNodeId
+    ? await getNextNode(result.nextNodeId, node.type)
+    : null;
+
+  const instanceStatus = getUpdatedInstanceStatus(
+    instance.auto_advance,
+    result,
+    node.type,
+  );
+
+  const instanceContext = getUpdatedInstanceContext(
+    node,
+    result.outputVariables,
+    instance,
+  );
+
+  return { nextNode, instanceStatus, instanceContext };
+}
+
+async function applyInstanceUpdate(
+  instance: InstanceModel,
+  node: NodeModel,
+  result: ExecutorResult,
+  nextNode: NodeModel | null,
+  instanceStatus: InstanceStatus,
+  instanceContext: ContextVariables,
+  transaction: Transaction<DB>,
+): Promise<InstanceModel> {
+  if (node.type === NodeTypes.END && result.status === TaskStatuses.COMPLETED) {
+    return await instanceService.end(
+      instance.id,
+      instanceStatus,
+      result.outputVariables,
+      transaction,
+    );
+  }
+
+  if (instanceStatus === InstanceStatuses.FAILED || nextNode === null) {
+    return await instanceService.fail(
+      instance.id,
+      result.error ?? "",
+      {},
+      transaction,
+    );
+  }
+
+  return await instanceService.updateContext(
+    instance.id,
+    instanceStatus,
+    instanceContext,
+    nextNode.id,
+    transaction,
+  );
+}
+
+async function runExecution(
+  executor: BaseExecutor,
+  executionContext: ContextVariables,
+  node: NodeModel,
+  instance: InstanceModel,
+  taskExecution: TaskExecutionModel,
+) {
+  const result = await executor.execute(node, executionContext);
+  const { nextNode, instanceStatus, instanceContext } =
+    await resolveInstanceUpdate(instance, node, result);
+
+  await db.transaction().execute(async (transaction) => {
+    const [, updatedInstance] = await Promise.all([
+      taskService.end(
+        taskExecution,
+        result.status,
+        result.outputVariables,
+        transaction,
+      ),
+      applyInstanceUpdate(
+        instance,
+        node,
+        result,
+        nextNode,
+        instanceStatus,
+        instanceContext,
+        transaction,
+      ),
+    ]);
+
+    if (nextNode && instance.auto_advance) {
+      await taskService.create(nextNode, updatedInstance, transaction);
+    }
+  });
+}
+
+async function handleExecutionFailure(
+  task: TaskModel,
+  taskExecution: TaskExecutionModel,
+  instance: InstanceModel,
+  err: unknown,
+) {
+  const message = err instanceof Error ? err.message : "Unknown error";
+  await db.transaction().execute(async (transaction) => {
+    await Promise.all([
+      taskExecutionService.fail(taskExecution.id, transaction),
+      taskService.fail(task.id, message, { err }, transaction),
+      instanceService.fail(instance.id, message, { err }, transaction),
+    ]);
+  });
+}
+
 export const executionEngine = {
   validateInstanceCanExecuteOrThrow: (instance: InstanceModel) => {
     if (
@@ -120,125 +284,17 @@ export const executionEngine = {
 
     console.log("Executing:", node.type);
 
-    const executionContext = taskService.getTaskContext(instance, node);
-    const taskExecution = await taskService.start(task.id, executionContext);
-    if (!taskExecution) {
-      await instanceService.fail(
-        instance.id,
-        `Failed to start execution of task id = ${taskId}`,
-        {},
-      );
-      return;
-    }
+    const { executor, executionContext, taskExecution } =
+      await getExecutionDetails(instance, node, task);
 
-    const executor = executors[node.type];
-    if (!executor) {
-      await taskService.fail(taskExecution.task_id, "Executor not found", {});
-      await instanceService.fail(
-        instance.id,
-        `Executor for node type="${node.type}" not found`,
-        {},
-      );
-      return;
-    }
-
-    let result: ExecutorResult = {
-      status: TaskStatuses.IN_PROGRESS,
-      outputVariables: {},
-      nextNodeId: null,
-    };
-
-    let updateInstanceContext = null;
-    let nextNode = null;
-
-    try {
-      executionEngine.validateInstanceCanExecuteOrThrow(instance);
-
-      const executionContext = taskService.getTaskContext(instance, node);
-
-      result = await executor.execute(node, executionContext);
-
-      updateInstanceContext = getUpdatedInstanceContext(
-        node,
-        result.outputVariables,
-        instance,
-      );
-
-      if (result.nextNodeId !== null) {
-        nextNode = await getNextNode(result.nextNodeId, node.type);
-      }
-    } catch (err) {
-      console.error(err);
-      let message = "Unknown error";
-
-      if (err instanceof Error) {
-        message = err.message;
-      }
-
-      await taskService.fail(task.id, message, { err });
-      await instanceService.fail(instance.id, message, { err });
-      return;
-    }
-
-    const updateInstanceStatus = getUpdatedInstanceStatus(
-      instance.auto_advance,
-      result,
-      node.type,
+    await runExecution(
+      executor,
+      executionContext,
+      node,
+      instance,
+      taskExecution,
+    ).catch((err) =>
+      handleExecutionFailure(task, taskExecution, instance, err),
     );
-
-    await db.transaction().execute(async (transaction) => {
-      let instanceUpdateCallback;
-
-      if (
-        node.type === NodeTypes.END &&
-        result.status === TaskStatuses.COMPLETED &&
-        nextNode === null
-      ) {
-        instanceUpdateCallback = async (transaction: Transaction<DB>) => {
-          return await instanceService.end(
-            instance.id,
-            updateInstanceStatus,
-            result.outputVariables,
-            transaction,
-          );
-        };
-      } else if (
-        updateInstanceStatus === InstanceStatuses.FAILED ||
-        nextNode === null
-      ) {
-        instanceUpdateCallback = async (transaction: Transaction<DB>) => {
-          return await instanceService.fail(
-            instance.id,
-            result.error ?? "",
-            {},
-            transaction,
-          );
-        };
-      } else {
-        instanceUpdateCallback = async (transaction: Transaction<DB>) => {
-          return await instanceService.updateContext(
-            instance.id,
-            updateInstanceStatus,
-            updateInstanceContext ?? {},
-            nextNode.id,
-            transaction,
-          );
-        };
-      }
-
-      const [updatedTask, updatedInstance] = await Promise.all([
-        taskService.end(
-          taskExecution,
-          result.status,
-          result.outputVariables,
-          transaction,
-        ),
-        instanceUpdateCallback(transaction),
-      ]);
-
-      if (nextNode && instance.auto_advance) {
-        await taskService.create(nextNode, updatedInstance);
-      }
-    });
   },
 };

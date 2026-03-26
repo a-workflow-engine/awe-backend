@@ -191,7 +191,7 @@ export const instanceService = {
     details: object,
     transaction?: Transaction<DB>,
   ): Promise<InstanceModel> => {
-    if (transaction) {
+    const executeCallback = async (transaction: Transaction<DB>) => {
       const [instance] = await Promise.all([
         instanceRepository.updateById(
           instanceId,
@@ -203,7 +203,7 @@ export const instanceService = {
           transaction,
         ),
 
-        await transitionLogService.createInstanceLog(
+        transitionLogService.createInstanceLog(
           {
             type: InstanceTransitionTypes.FAILED,
             instanceId,
@@ -215,33 +215,11 @@ export const instanceService = {
       ]);
 
       return instance;
-    }
+    };
 
-    return await db.transaction().execute(async (transaction) => {
-      const [instance] = await Promise.all([
-        instanceRepository.updateById(
-          instanceId,
-          {
-            status: InstanceStatuses.FAILED,
-            ended_on: new Date(),
-            current_node_id: null,
-          },
-          transaction,
-        ),
-
-        await transitionLogService.createInstanceLog(
-          {
-            type: InstanceTransitionTypes.FAILED,
-            instanceId,
-            message,
-            details,
-          },
-          transaction,
-        ),
-      ]);
-
-      return instance;
-    });
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
   },
 
   end: async (

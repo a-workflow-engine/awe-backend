@@ -728,13 +728,8 @@ export interface TaskTransitionLog {
 export interface UserTaskExecution {
   assignee: string | null;
   created_on: Generated<Timestamp>;
-  ended_on: Timestamp | null;
   id: Generated<string>;
-  request_variables: Json | null;
-  response_variables: Json | null;
-  started_on: Timestamp | null;
-  status: TaskStatus;
-  task_id: string;
+  task_execution_id: string;
   title: string | null;
 }
 
