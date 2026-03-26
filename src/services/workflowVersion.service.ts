@@ -270,4 +270,43 @@ export const workflowVersionService = {
       return workflowVersion;
     });
   },
+
+getById: async (versionId: string): Promise<WorkflowVersionModel> => {
+  const version=await workflowVersionRepository.findById(versionId);
+  if(!version){
+    throw new Error("Workflow version not found")
+  }
+  return version;
+},
+
+validateById: async ({ versionId, actor }: any) => {
+  const version = await workflowVersionService.getById(versionId);
+  
+  return await workflowVersionService.validate({
+    workflowId: version.workflow_id,
+    version: Number(version.version),
+    actor,
+  });
+},
+
+changeStatusById: async ({ versionId, status, actor }: any) => {
+  const version = await workflowVersionService.getById(versionId);
+
+  return await workflowVersionService.changeStatus({
+    workflowId: version.workflow_id,
+    version: version.version,
+    status,
+    actor,
+  });
+},
+
+updateById: async (data: any) => {
+  const version = await workflowVersionService.getById(data.versionId);
+
+  return await workflowVersionService.update({
+    workflowId: version.workflow_id,
+    version: version.version,
+    ...data,
+  });
+},
 };

@@ -2,14 +2,26 @@ import { Router } from "express";
 import { workflowGroupController } from "../controllers/workflowGroup.controller.js";
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
 import { workflowVersionController } from "../controllers/workflowVersion.controller.js";
+import { versionRouter } from "./workflow.version.routes.js";
 
 export const workflowRouter = Router();
 
-workflowRouter.post("/", authenticateRequest, workflowGroupController.create);
+workflowRouter.post(
+  "/",
+  authenticateRequest,
+  workflowGroupController.create
+);
 
-workflowRouter.get("/", authenticateRequest, workflowGroupController.list);
+workflowRouter.get(
+  "/",
+  authenticateRequest,
+  workflowGroupController.list
+);
 
-workflowRouter.post("/validate", workflowGroupController.validate);
+workflowRouter.post(
+  "/validate",
+  workflowGroupController.validate
+);
 
 workflowRouter.get(
   "/:workflowId",
@@ -87,3 +99,5 @@ workflowRouter.patch(
   authenticateRequest,
   workflowVersionController.update,
 );
+
+workflowRouter.use("/versions",versionRouter)
