@@ -1,6 +1,6 @@
 import { db } from "../database.js";
 import type { DB, TaskStatus, UserTaskExecution } from "../types/database.js";
-import { type Insertable, type Updateable, type Transaction } from "kysely";
+import type { Insertable, Transaction } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
   NodeModel,
@@ -11,14 +11,8 @@ import type {
   PendingUserTaskList,
   WorkflowDetailsForUserTask,
 } from "../types/userTask.js";
-import {
-  NODE_KEYS,
-  selectAllWithPrefix,
-  USER_TASK_EXECUTION_KEYS,
-} from "./utils.js";
 
 type NewUserTaskExecution = Insertable<UserTaskExecution>;
-type UpdateUserTaskExecution = Updateable<UserTaskExecution>;
 
 export const userTaskExecutionRepository = {
   insert: async (

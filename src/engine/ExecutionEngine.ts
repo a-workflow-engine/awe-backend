@@ -49,8 +49,8 @@ function getUpdatedInstanceContext(
       ...instanceContext.constants,
       ...executionOuputVariables,
     },
-    fetchables: {},
-    urls: {},
+    fetchables: {...instanceContext.fetchables},
+    urls: {...instanceContext.urls},
   };
 }
 
