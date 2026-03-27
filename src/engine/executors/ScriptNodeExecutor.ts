@@ -18,7 +18,6 @@ export class ScriptNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = ScriptNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {

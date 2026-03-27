@@ -13,7 +13,6 @@ export class EndNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = EndNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {

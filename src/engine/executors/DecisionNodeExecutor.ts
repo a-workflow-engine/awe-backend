@@ -19,7 +19,6 @@ export class DecisionNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = DecisionNodeConfigurationSchema.safeParse(
       node.configuration,
@@ -32,7 +31,7 @@ export class DecisionNodeExecutor extends BaseExecutor {
 
     const configuration = parsed.data;
 
-    const edges = await edgeService.getBySourceNodeId(node.id, transaction);
+    const edges = await edgeService.getBySourceNodeId(node.id);
 
     if (edges.length === 0) {
       throw new StateTransitionError(

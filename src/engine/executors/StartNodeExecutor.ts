@@ -18,7 +18,6 @@ export class StartNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = StartNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {

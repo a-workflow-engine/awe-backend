@@ -26,7 +26,6 @@ export class ServiceNodeExecutor extends BaseExecutor {
   async execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult> {
     const parsed = ServiceNodeConfigurationSchema.safeParse(node.configuration);
     if (!parsed.success) {
@@ -137,7 +136,7 @@ export class ServiceNodeExecutor extends BaseExecutor {
       }
     } catch (error) {
       let error_message = "Unknown error";
-      if(error instanceof Error){
+      if (error instanceof Error) {
         error_message = `Service node failed: ${error.message}`;
       }
       return {
@@ -156,7 +155,6 @@ export class ServiceNodeExecutor extends BaseExecutor {
 
     const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
       node.id,
-      transaction,
     );
 
     return {

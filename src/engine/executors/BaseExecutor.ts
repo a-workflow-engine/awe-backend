@@ -7,6 +7,5 @@ export abstract class BaseExecutor {
   abstract execute(
     node: NodeModel,
     inputVariables: ContextVariables,
-    transaction?: Transaction<DB>,
   ): Promise<ExecutorResult>;
 }
