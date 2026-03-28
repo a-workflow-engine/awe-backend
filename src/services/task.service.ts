@@ -1,30 +1,18 @@
 import { taskRepository } from "../repositories/task.repository.js";
-import type { DB, TaskExecution, TaskStatus } from "../types/database.js";
-import type {
-  InstanceModel,
-  NodeModel,
-  TaskExecutionModel,
-  TaskModel,
-  UserTaskExecutionModel,
-} from "../types/models.js";
+import type { DB } from "../types/database.js";
+import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import type { Transaction } from "kysely";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { nodeRepository } from "../repositories/node.repository.js";
 import { db } from "../database.js";
-import {
-  LogEventTypes,
-  NodeTypes,
-  TaskStatuses,
-  TaskTransitionTypes,
-} from "../types/enums.js";
+import { LogEventTypes, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { queueService } from "./queue.service.js";
 import { userTaskService } from "./userTaskExecution.service.js";
 import type { ContextVariables } from "../types/engine.js";
 import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { contextUtils } from "../utils/context.utils.js";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 import { getLogger } from "../logger.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";

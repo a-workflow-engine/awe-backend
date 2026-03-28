@@ -37,8 +37,6 @@ export type InstanceEventType = "completed" | "failed" | "paused" | "resumed" | 
 
 export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
-export type InstanceTransitionType = "completed" | "created" | "failed" | "paused" | "resumed" | "started" | "terminated";
-
 export type Int8 = ColumnType<string, bigint | number | string, bigint | number | string>;
 
 export type Json = JsonValue;
@@ -60,8 +58,6 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
 export type TaskStatus = "completed" | "failed" | "in_progress" | "terminated";
-
-export type TaskTransitionType = "completed" | "created" | "failed" | "retried" | "started" | "terminated";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -525,16 +521,6 @@ export interface InstanceLog {
   instance_id: string;
 }
 
-export interface InstanceTransitionLog {
-  created_by: string | null;
-  created_on: Generated<Timestamp>;
-  details: Json | null;
-  id: Generated<string>;
-  instance_id: string;
-  message: string | null;
-  transition_type: InstanceTransitionType;
-}
-
 export interface Node {
   client_id: string;
   configuration: Json;
@@ -730,16 +716,6 @@ export interface TaskExecution {
   task_id: string;
 }
 
-export interface TaskTransitionLog {
-  created_by: string | null;
-  created_on: Generated<Timestamp>;
-  details: Json | null;
-  id: Generated<string>;
-  message: string | null;
-  task_id: string;
-  transition_type: TaskTransitionType;
-}
-
 export interface UserTaskExecution {
   assignee: string | null;
   created_on: Generated<Timestamp>;
@@ -833,7 +809,6 @@ export interface DB {
   "extensions.pg_stat_statements_info": ExtensionsPgStatStatementsInfo;
   instance: Instance;
   instance_log: InstanceLog;
-  instance_transition_log: InstanceTransitionLog;
   node: Node;
   organization: Organization;
   "realtime.messages": RealtimeMessages;
@@ -851,7 +826,6 @@ export interface DB {
   system: System;
   task: Task;
   task_execution: TaskExecution;
-  task_transition_log: TaskTransitionLog;
   user_task_execution: UserTaskExecution;
   "vault.decrypted_secrets": VaultDecryptedSecrets;
   "vault.secrets": VaultSecrets;
