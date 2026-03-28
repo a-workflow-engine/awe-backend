@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { userTaskService } from "../services/userTask.service.js";
+import { userTaskService } from "../services/userTaskExecution.service.js";
 import { UserTaskParamsSchema } from "../schemas/task.schema.js";
 import {
   buildPaginatedResponse,

@@ -1,3 +1,4 @@
+import type { Transaction } from "kysely";
 import { db } from "../database";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository";
 import type { ContextVariables } from "../types/engine";
@@ -6,13 +7,15 @@ import type { LogDetailSchema } from "../types/instanceLog";
 import type { TaskExecutionModel, TaskModel } from "../types/models";
 import { converterUtils } from "../utils/converter.utils";
 import { eventLogService } from "./eventLog.service";
+import type { DB } from "../types/database";
 
 export const taskExecutionService = {
   create: async (
     task: TaskModel,
     inputVariables: ContextVariables,
+    transaction?: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
-    return await db.transaction().execute(async (transaction) => {
+    const executeCallback = async (transaction: Transaction<DB>) => {
       const taskExecution = await taskExecutionRepository.insert(
         {
           task_id: task.id,
@@ -33,7 +36,11 @@ export const taskExecutionService = {
       );
 
       return taskExecution;
-    });
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
   },
 
   complete: async (

@@ -1,5 +1,3 @@
-import type { Transaction } from "kysely";
-import type { DB } from "../../types/database.js";
 import type { NodeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
 import { EndNodeConfigurationSchema } from "../../schemas/node.schema.js";
@@ -41,9 +39,7 @@ export class EndNodeExecutor extends BaseExecutor {
     }
 
     return {
-      status: configuration.success
-        ? TaskStatuses.COMPLETED
-        : TaskStatuses.FAILED,
+      status: TaskStatuses.COMPLETED,
       outputVariables,
       nextNodeId: null,
     };

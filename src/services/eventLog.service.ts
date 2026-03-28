@@ -67,25 +67,4 @@ export const eventLogService = {
       transaction,
     );
   },
-
-  createUserTaskExecutionLog: async (
-    instanceId: string,
-    userTaskExecutionId: string,
-    type: InstanceEventType,
-    details?: LogDetailSchema,
-    actorId?: string,
-    transaction?: Transaction<DB>,
-  ): Promise<void> => {
-    await instanceLogRepository.insert(
-      {
-        instance_id: instanceId,
-        entity_type: InstanceEntityTypes.USER_TASK_EXECUTION,
-        entity_id: userTaskExecutionId,
-        event_type: type,
-        details: details ? converterUtils.objectToJsonValue(details) : null,
-        created_by: actorId ?? null,
-      },
-      transaction,
-    );
-  },
 };

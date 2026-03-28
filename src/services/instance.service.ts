@@ -83,6 +83,7 @@ export const instanceService = {
           input_variables: converterUtils.objectToJsonValue(data.context),
           created_by: actor.id,
           started_on: new Date(),
+          current_node_id: startNode.id,
         },
         transaction,
       );
@@ -97,6 +98,10 @@ export const instanceService = {
 
       return instance;
     });
+
+    if (instance.auto_advance === false) {
+      return { instance, workflowVersion };
+    }
 
     try {
       await taskService.create(startNode, instance);
@@ -166,6 +171,13 @@ export const instanceService = {
       );
     }
 
+    if (
+      !instance.auto_advance &&
+      instance.status === InstanceStatuses.IN_PROGRESS
+    ) {
+      throw new StateTransitionError("Instance is in execution");
+    }
+
     engineUtils.validateInstanceCanExecuteOrThrow(instance);
 
     if (!instance.current_node_id) {
@@ -181,7 +193,14 @@ export const instanceService = {
       );
     }
 
-    await taskService.create(nextNode, instance);
+    await db.transaction().execute(async (transaction) => {
+      await instanceRepository.updateById(
+        instance.id,
+        { status: InstanceStatuses.IN_PROGRESS },
+        transaction,
+      );
+      await taskService.create(nextNode, instance, transaction);
+    });
   },
 
   updateContext: async (

@@ -19,7 +19,7 @@ import {
   TaskTransitionTypes,
 } from "../types/enums.js";
 import { queueService } from "./queue.service.js";
-import { userTaskService } from "./userTask.service.js";
+import { userTaskService } from "./userTaskExecution.service.js";
 import type { ContextVariables } from "../types/engine.js";
 import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -27,6 +27,9 @@ import { contextUtils } from "../utils/context.utils.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 import { getLogger } from "../logger.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
+import { engineUtils } from "../utils/engine.utils.js";
+import { EngineError } from "../errors/EngineError.js";
+import { taskExecutionService } from "./taskExecution.service.js";
 
 export const taskService = {
   getById: async (taskId: string): Promise<TaskModel> => {
@@ -66,8 +69,6 @@ export const taskService = {
     instance: InstanceModel,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
-    const logger = getLogger();
-
     const executeCallback = async (transaction: Transaction<DB>) => {
       const task = await taskRepository.insert(
         {
@@ -87,101 +88,51 @@ export const taskService = {
         transaction,
       );
 
+      if (node.type !== NodeTypes.USER) {
+        await queueService
+          .enqueue({
+            instanceId: instance.id,
+            taskId: task.id,
+            nodeId: node.id,
+          })
+          .then(() => task)
+          .catch(async (err: Error) => {
+            await engineUtils.onExecutionFailure(err, task);
+            throw new EngineError("Unable to create task.");
+          });
+
+        return task;
+      }
+
+      try {
+        const executionContext = taskService.getTaskContext(instance, node);
+
+        const taskExecution = await taskExecutionService.create(
+          task,
+          executionContext,
+          transaction,
+        );
+
+        await userTaskService
+          .create(node, taskExecution, executionContext, transaction)
+          .then(() => task)
+          .catch(async (err: Error) => {
+            await engineUtils.onExecutionFailure(err, task);
+            throw new EngineError("Unable to create task.");
+          });
+      } catch (err) {
+        console.log(err);
+        await engineUtils.onExecutionFailure(err, task);
+        throw new EngineError("Unable to create task.");
+      }
+      getLogger().info("Created user task");
+
       return task;
     };
 
-    const task = transaction
+    return transaction
       ? await executeCallback(transaction)
       : await db.transaction().execute(executeCallback);
-
-    if (node.type !== NodeTypes.USER) {
-      return await queueService
-        .enqueue({
-          instanceId: instance.id,
-          taskId: task.id,
-          nodeId: node.id,
-        })
-        .then(() => task)
-        .catch(async (err: Error) => {
-          return await taskService.fail(
-            instance.id,
-            task.id,
-            {
-              message: "Failed to enqueue task",
-              error: err,
-            },
-            err,
-          );
-        });
-    }
-
-    let executionContext;
-    let taskExecution;
-
-    try {
-      executionContext = taskService.getTaskContext(instance, node);
-      taskExecution = await taskService.startNewExecution(
-        task,
-        executionContext,
-      );
-    } catch (err) {
-      let message = "Unknown error";
-      let error;
-
-      if (err instanceof Error) {
-        message = err.message;
-        error = err;
-      }
-
-      return await taskService.fail(
-        instance.id,
-        task.id,
-        {
-          message,
-        },
-        error,
-      );
-    }
-
-    return await userTaskService
-      .create(node, taskExecution, executionContext)
-      .then(() => task)
-      .catch(async (err: Error) => {
-        return await taskService.fail(
-          instance.id,
-          task.id,
-          { message: err.message },
-          err,
-        );
-      });
-  },
-
-  startNewExecution: async (
-    task: TaskModel,
-    inputVariables: ContextVariables,
-  ): Promise<TaskExecutionModel> => {
-    return await db.transaction().execute(async (transaction) => {
-      const taskExecution = await taskExecutionRepository.insert(
-        {
-          task_id: task.id,
-          status: TaskStatuses.IN_PROGRESS,
-          input_variables: converterUtils.objectToJsonValue(inputVariables),
-          started_on: new Date(),
-        },
-        transaction,
-      );
-
-      await eventLogService.createTaskExecutionLog(
-        task.instance_id,
-        taskExecution.id,
-        LogEventTypes.STARTED,
-        undefined,
-        undefined,
-        transaction,
-      );
-
-      return taskExecution;
-    });
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {

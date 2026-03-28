@@ -1,16 +1,12 @@
-import { taskRepository } from "../repositories/task.repository.js";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { UserNodeConfigurationSchema } from "../schemas/node.schema.js";
 import { ValidationError } from "../errors/ValidationError.js";
-import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { TaskStatuses, InstanceStatuses } from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
-import { instanceService } from "./instance.service.js";
-import type { ContextVariables } from "../types/engine.js";
+import type { ContextVariables, ExecutorResult } from "../types/engine.js";
 import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import type {
@@ -22,15 +18,18 @@ import type {
 import { contextUtils } from "../utils/context.utils.js";
 import { environmentService } from "./environment.services.js";
 import type { PendingUserTaskList } from "../types/userTask.js";
-import { nodeService } from "./node.services.js";
 import { taskService } from "./task.service.js";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
+import { taskExecutionService } from "./taskExecution.service.js";
+import { engineUtils } from "../utils/engine.utils.js";
+import { Transaction } from "kysely";
+import type { DB } from "../types/database.js";
 
 export const userTaskService = {
   create: async (
     node: UserNodeModel,
     taskExecution: TaskExecutionModel,
     executionContext: ContextVariables,
+    transaction: Transaction<DB>,
   ): Promise<UserTaskExecutionModel> => {
     const configObject = converterUtils.jsonValueToObject(node.configuration);
     const configuration = converterUtils.parseOrThrow(
@@ -50,11 +49,14 @@ export const userTaskService = {
       : null;
     const title = configuration.title ?? null;
 
-    return await userTaskExecutionRepository.insert({
-      task_execution_id: taskExecution.id,
-      assignee,
-      title,
-    });
+    return await userTaskExecutionRepository.insert(
+      {
+        task_execution_id: taskExecution.id,
+        assignee,
+        title,
+      },
+      transaction,
+    );
   },
 
   getPending: async (actor: ActorModel): Promise<PendingUserTaskList[]> => {
@@ -143,17 +145,18 @@ export const userTaskService = {
     taskExecution: TaskExecutionModel;
   }> => {
     const environment = await environmentService.getByActor(actor);
-    const result =
+    const models =
       await userTaskExecutionRepository.findByIdAndEnvironmentIdWithRelations(
         id,
         environment.id,
       );
 
-    if (!result) {
+    if (!models) {
       throw new NotFoundError("User task");
     }
 
-    const { userTaskExecution, taskExecution, node, workflow } = result;
+    const { userTaskExecution, taskExecution, node, workflow } = models;
+    const task = await taskService.getById(taskExecution.task_id);
 
     if (taskExecution.status !== TaskStatuses.IN_PROGRESS) {
       throw new StateTransitionError(
@@ -202,61 +205,24 @@ export const userTaskService = {
       outputVariables[field.contextVariableName] = userInput[field.fieldId];
     }
 
-    const mainContext = converterUtils.jsonValueToContextVariables(
-      instance.current_variables,
-    );
-
-    mainContext.constants = {
-      ...mainContext.constants,
-      ...outputVariables,
-    };
-
     const [nextNodeId] = await edgeService.getDestinationNodeIdsBySourceNodeId(
       node.id,
     );
 
-    return await db.transaction().execute(async (transaction) => {
-      const updatedInstance = await instanceService.updateContext(
-        instance.id,
-        instance.auto_advance
-          ? InstanceStatuses.IN_PROGRESS
-          : InstanceStatuses.PAUSED,
-        mainContext,
-        nextNodeId ?? null,
-        transaction,
-      );
+    const updatedtaskExecution = await taskExecutionService.complete(
+      instance.id,
+      taskExecution.id,
+      outputVariables,
+    );
 
-      await taskRepository.updateById(
-        taskExecution.task_id,
-        { status: TaskStatuses.COMPLETED },
-        transaction,
-      );
+    const result: ExecutorResult = {
+      status: updatedtaskExecution.status,
+      outputVariables: outputVariables,
+      nextNodeId: nextNodeId ?? null,
+    };
 
-      const returnTaskExecution = await taskExecutionRepository.updateById(
-        taskExecution.id,
-        {
-          ended_on: new Date(),
-          status: TaskStatuses.COMPLETED,
-          output_variables: converterUtils.objectToJsonValue(outputVariables),
-        },
-      );
+    await engineUtils.updateInstanceAndTask(instance, node, task, result);
 
-      if (!nextNodeId) {
-        throw new DataIntegrityError(
-          "No node after user node. End node missing.",
-        );
-      }
-
-      const nextNode = await nodeService.getById(nextNodeId);
-      if (!nextNode) {
-        throw new DataIntegrityError(`Node not found node id = ${nextNodeId}`);
-      }
-
-      if (instance.auto_advance) {
-        await taskService.create(nextNode, updatedInstance);
-      }
-
-      return { userTaskExecution, taskExecution: returnTaskExecution };
-    });
+    return { taskExecution: updatedtaskExecution, userTaskExecution };
   },
 };
