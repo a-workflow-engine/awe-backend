@@ -66,8 +66,8 @@ export const workflowVersionController = {
 
   validate: async (req: Request, res: Response) => {
     const data = WorkflowVersionValidateSchema.parse({
-      ...req.params,
-      actor: req.actor,
+      versionId: req.params.versionId,
+  actor: req.actor,
     });
 
     const { result, workflowVersion } =
@@ -82,8 +82,8 @@ export const workflowVersionController = {
 
   get: async (req: Request, res: Response) => {
     const data = WorkflowVersionDetailSchema.parse({
-      ...req.params,
-      actor: req.actor,
+       versionId: req.params.versionId,
+  actor: req.actor,
     });
 
     const { workflowVersion, nodes, edges, startVariables } =
@@ -105,9 +105,9 @@ export const workflowVersionController = {
 
   updateStatus: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateStatusSchema.parse({
-      ...req.params,
-      ...req.body,
-      actor: req.actor,
+      versionId: req.params.versionId,
+  ...req.body,
+  actor: req.actor,
     });
 
     const workflowVersion = await workflowVersionService.changeStatus(data);
@@ -124,9 +124,9 @@ export const workflowVersionController = {
 
   update: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateSchema.parse({
-      ...req.params,
-      ...req.body,
-      actor: req.actor,
+      versionId: req.params.versionId,
+  ...req.body,
+  actor: req.actor,
     });
     const workflowVersion = await workflowVersionService.update(data);
     return res.status(200).json({
@@ -141,9 +141,9 @@ export const workflowVersionController = {
 
   publish: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateStatusSchema.parse({
-      ...req.params,
-      status: WorkflowVersionStatuses.PUBLISHED,
-      actor: req.actor,
+     versionId: req.params.versionId,
+  status: WorkflowVersionStatuses.PUBLISHED,
+  actor: req.actor,
     });
     const workflowVersion = await workflowVersionService.changeStatus(data);
     return res.status(200).json({
@@ -157,9 +157,9 @@ export const workflowVersionController = {
 
   activate: async (req: Request, res: Response) => {
     const data = WorkflowVersionUpdateStatusSchema.parse({
-      ...req.params,
-      status: WorkflowVersionStatuses.ACTIVE,
-      actor: req.actor,
+      versionId: req.params.versionId,
+  status: WorkflowVersionStatuses.ACTIVE,
+  actor: req.actor,
     });
     const workflowVersion = await workflowVersionService.changeStatus(data);
     return res.status(200).json({

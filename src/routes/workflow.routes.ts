@@ -5,85 +5,45 @@ import { workflowVersionController } from "../controllers/workflowVersion.contro
 
 export const workflowRouter = Router();
 
-workflowRouter.post("/", authenticateRequest, workflowGroupController.create);
-
+// WORKFLOWS
 workflowRouter.get("/", authenticateRequest, workflowGroupController.list);
 
-workflowRouter.post("/validate", workflowGroupController.validate);
+workflowRouter.post("/", authenticateRequest, workflowGroupController.create);
 
-workflowRouter.get(
-  "/:workflowId",
-  authenticateRequest,
-  workflowGroupController.get,
-);
-
-workflowRouter.patch(
-  "/:workflowId",
-  authenticateRequest,
-  workflowGroupController.update,
-);
-
-workflowRouter.delete(
-  "/:workflowId",
-  authenticateRequest,
-  workflowGroupController.delete,
-);
-
-workflowRouter.patch(
-  "/:workflowId/status",
-  workflowGroupController.changeStatus,
-);
-
+// CREATE VERSION
 workflowRouter.post(
   "/:workflowId/versions",
   authenticateRequest,
-  workflowVersionController.create,
+  workflowVersionController.create
 );
 
-workflowRouter.get(
-  "/:workflowId/versions",
+// VERSION BASED ROUTES (NOW USING versionId)
+workflowRouter.post(
+  "/versions/:versionId/validate",
   authenticateRequest,
-  workflowVersionController.list,
-);
-
-workflowRouter.get(
-  "/:workflowId/versions/:version",
-  authenticateRequest,
-  workflowVersionController.get,
+  workflowVersionController.validate
 );
 
 workflowRouter.post(
-  "/:workflowId/versions/:version/validate",
+  "/versions/:versionId/publish",
   authenticateRequest,
-  workflowVersionController.validate,
+  workflowVersionController.publish
+);
+
+workflowRouter.post(
+  "/versions/:versionId/activate",
+  authenticateRequest,
+  workflowVersionController.activate
+);
+
+workflowRouter.post(
+  "/versions/:versionId/deactivate",
+  authenticateRequest,
+  workflowVersionController.publish
 );
 
 workflowRouter.patch(
-  "/:workflowId/versions/:version/status",
+  "/versions/:versionId",
   authenticateRequest,
-  workflowVersionController.updateStatus,
-);
-
-workflowRouter.post(
-  "/:workflowId/versions/:version/publish",
-  authenticateRequest,
-  workflowVersionController.publish,
-);
-
-workflowRouter.post(
-  "/:workflowId/versions/:version/activate",
-  authenticateRequest,
-  workflowVersionController.activate,
-);
-
-workflowRouter.post(
-  "/:workflowId/versions/:version/deactivate",
-  authenticateRequest,
-  workflowVersionController.publish,
-);
-
-workflowRouter.patch(
-  "/:workflowId/versions/:version",
-  authenticateRequest,
-  workflowVersionController.update,
+  workflowVersionController.update
 );
