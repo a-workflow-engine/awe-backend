@@ -8,6 +8,8 @@ import { TaskStatuses } from "../../types/enums.js";
 import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { JDoodleService } from "../../services/jdoodle.service.js";
+import { GeminiService } from "../../services/gemini.service.js";
+import { getLogger } from "../../logger.js";
 
 function getValueByPath(obj: any, path: string) {
   return path.split(".").reduce((acc, key) => acc?.[key], obj);
@@ -34,19 +36,49 @@ export class ScriptNodeExecutor extends BaseExecutor {
     );
 
     let parsedOutput;
+    let rawOutput: string = "";
 
     try {
-      const response = await JDoodleService.executeScript(
-        configuration.sourceCode,
-        configuration.entryFunctionName,
-        parameters,
+      const executionService = configuration.executionService ?? "jdoodle";
+      const logger = getLogger();
+
+      logger.info(
+        { nodeId: node.id, executionService },
+        `Executing script using ${executionService} service`,
       );
 
-      parsedOutput = response.parsedOutput;
+      if (executionService === "gemini") {
+        // Use GeminiService
+        parsedOutput = await GeminiService.executeScript(
+          configuration.sourceCode,
+          configuration.entryFunctionName,
+          parameters,
+        );
+        rawOutput = JSON.stringify(parsedOutput);
+      } else {
+        // Default to JDoodleService
+        const response = await JDoodleService.executeScript(
+          configuration.sourceCode,
+          configuration.entryFunctionName,
+          parameters,
+        );
+        parsedOutput = response.parsedOutput;
+        rawOutput = response.rawOutput;
+      }
 
-      console.log("RAW:", response.rawOutput);
+      console.log("RAW:", rawOutput);
       console.log("PARSED:", parsedOutput);
     } catch (error: any) {
+      const logger = getLogger();
+      logger.error(
+        {
+          nodeId: node.id,
+          error: error.message,
+          stack: error.stack,
+          executionService: configuration.executionService ?? "jdoodle",
+        },
+        "Script execution failed",
+      );
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
