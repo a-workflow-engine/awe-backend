@@ -110,7 +110,13 @@ export const ServiceNodeConfigurationSchema = z.object({
 
   maxAttempts: z.number().optional().default(1),
   timeoutMs: z.number().optional(),
-  retryDelayMs: z.number().optional(),
+  backoff: z
+    .object({
+      type: z.enum(["fixed", "exponential"]),
+      delayMs: z.number().positive(),
+    })
+    .optional()
+    .default({ type: "fixed", delayMs: 1000 }),
 
   body: z.array(ServiceBodySchema).optional(),
   headers: z.array(HttpHeaderSchema).optional(),
