@@ -32,7 +32,6 @@ export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 
-// ✅ HELPER (IMPORTANT)
 const getVersionOrThrow = async (versionId: string) => {
   const version = await workflowVersionRepository.findById(versionId);
   if (!version) {
@@ -251,7 +250,7 @@ export const workflowVersionService = {
 
       if (newStatus === WorkflowVersionStatuses.ACTIVE) {
         await workflowVersionRepository.demoteActiveVersionToPublished(
-          workflowVersion.workflow_id, // ✅ FIXED
+          workflowVersion.workflow_id,
           transaction,
         );
       }
