@@ -412,10 +412,7 @@ function calculateDataFlow(
   return nodeInputs;
 }
 
-function validateStartNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateStartNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -438,9 +435,7 @@ function validateStartNode(
       errors,
     );
     if (hasContextName) {
-      const contextVariableName = entry.contextVariableName.trim();
-      assignedOutputs.add(contextVariableName);
-      inputVariables.add(contextVariableName);
+      assignedOutputs.add(entry.contextVariableName.trim());
     }
   });
 
@@ -465,10 +460,7 @@ function validateStartNode(
   return errors;
 }
 
-function validateEndNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateEndNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     EndNodeConfigurationSchema,
@@ -505,10 +497,7 @@ function validateEndNode(
   return errors;
 }
 
-function validateUserNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateUserNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -580,10 +569,7 @@ function validateUserNode(
   return errors;
 }
 
-function validateServiceNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateServiceNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
 
@@ -661,10 +647,7 @@ function validateServiceNode(
   return errors;
 }
 
-function validateScriptNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateScriptNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -799,10 +782,7 @@ function validateScriptNode(
   return errors;
 }
 
-function validateDecisionNode(
-  node: NodeModel,
-  inputVariables: Set<string>,
-): ValidationError[] {
+function validateDecisionNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     DecisionNodeConfigurationSchema,
@@ -858,20 +838,14 @@ export const workflowValidatorService = {
     return { valid: errors.length === 0, errors };
   },
 
-  validateAllNodes: (
-    nodes: NodeModel[],
-    edges: EdgeModel[],
-  ): ValidationError[] => {
+  validateAllNodes: (nodes: NodeModel[], edges: EdgeModel[]): ValidationError[] => {
     const errors: ValidationError[] = [];
     let startNodes = 0;
     let endNodes = 0;
 
     const availableVariables = calculateDataFlow(nodes, edges);
 
-    const validators: Record<
-      string,
-      (node: NodeModel, vars: Set<string>) => ValidationError[]
-    > = {
+    const validators: Record<string, (node: NodeModel, vars: Set<string>) => ValidationError[]> = {
       [NodeTypes.START]: validateStartNode,
       [NodeTypes.END]: validateEndNode,
       [NodeTypes.USER]: validateUserNode,
@@ -1084,68 +1058,7 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  validateDefinition: (nodes: any[], edges: any[]): ValidationResult => {
-    const clientIdToIdMap = new Map<string, string>();
-
-    const nodeModels: NodeModel[] = nodes.map((node) => {
-      const id = uuidv4();
-      clientIdToIdMap.set(node.id, id);
-
-      const { inputSchema, outputSchema } =
-        nodeSchemaService.getInputOutputSchemas(node);
-
-      return {
-        id,
-        client_id: node.id,
-        configuration: converterUtils.objectToJsonValue(node.configuration),
-        type: node.type,
-        input_schema: converterUtils.objectToJsonValue(inputSchema),
-        output_schema: converterUtils.objectToJsonValue(outputSchema),
-        created_on: new Date(),
-        modified_on: new Date(),
-        created_by: "system",
-        modified_by: "system",
-        is_deleted: false,
-        max_attempts: 1,
-        name: node.label ?? null,
-        workflow_version_id: "preview",
-        description: node.description ?? null,
-        x_coordinate: node.position?.x ?? null,
-        y_coordinate: node.position?.y ?? null,
-      } as NodeModel;
-    });
-
-    const edgeModels: EdgeModel[] = edges.map((edge) => {
-      const sourceId = clientIdToIdMap.get(edge.sourceNodeId) ?? "";
-      const destId = edge.targetNodeId
-        ? clientIdToIdMap.get(edge.targetNodeId) ?? null
-        : null;
-
-      let condition_expression: string | null = null;
-      const sourceNode = nodes.find((n) => n.id === edge.sourceNodeId);
-      if (sourceNode && sourceNode.type === NodeTypes.DECISION) {
-        const config = sourceNode.configuration as any;
-        if (edge.ruleId !== "default" && edge.ruleId !== config.defaultRule?.id) {
-          const rule = config.rules?.find((r: any) => r.id === edge.ruleId);
-          if (rule) {
-            condition_expression = rule.conditionExpression;
-          }
-        }
-      }
-
-      return {
-        id: uuidv4(),
-        client_id: edge.id,
-        source_node_id: sourceId,
-        destination_node_id: destId,
-        condition_expression,
-        created_by: "system",
-        modified_by: "system",
-        is_deleted: false,
-        name: edge.label ?? null,
-      } as EdgeModel;
-    });
-
-    return workflowValidatorService.validate(nodeModels, edgeModels);
+  validateDefinition: (nodes: NodeModel[], edges: EdgeModel[]): ValidationResult => {
+    return workflowValidatorService.validate(nodes, edges);
   },
 };

@@ -4,6 +4,7 @@ import type { Transaction } from "kysely";
 import { instanceLogRepository } from "../repositories/instanceLog.repository";
 import { InstanceEntityTypes } from "../types/enums";
 import type { LogDetailSchema as LogDetailSchema } from "../types/instanceLog";
+import fi from "zod/v4/locales/fi.cjs";
 
 export const eventLogService = {
   createInstanceLog: async (
@@ -67,4 +68,8 @@ export const eventLogService = {
       transaction,
     );
   },
+
+  getLogsByInstanceId: async (instanceId: string, filters: any = {}, sortOrder: "asc" | "desc" = "asc") => {
+    return await instanceLogRepository.getInstanceHistory(instanceId, filters, sortOrder);
+  }
 };
