@@ -131,7 +131,6 @@ export const taskService = {
             throw new EngineError("Unable to create task.");
           });
       } catch (err) {
-        console.log(err);
         await engineUtils.onExecutionFailure(err, task);
         throw new EngineError("Unable to create task.");
       }

@@ -222,7 +222,10 @@ export const engineUtils = {
       return;
     }
 
-    if (updatedInstance.auto_advance === false) {
+    if (
+      updatedInstance.auto_advance === false ||
+      updatedInstance.status !== InstanceStatuses.IN_PROGRESS
+    ) {
       return;
     }
 
@@ -230,7 +233,7 @@ export const engineUtils = {
       engineUtils.validateInstanceCanExecuteOrThrow(updatedInstance);
       await handleNextNode(updatedInstance, node.type, result.nextNodeId);
     } catch (err) {
-      getLogger().info("Cannot go to next node");
+      getLogger().info({ error: err }, "Cannot go to next node");
       return;
     }
   },

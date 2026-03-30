@@ -9,8 +9,9 @@ import { instanceService } from "../../services/instance.service.js";
 import { nodeService } from "../../services/node.services.js";
 import TaskExecutor from "../executors/TaskExecutor.js";
 import type { Logger } from "pino";
-import { TaskStatuses } from "../../types/enums.js";
-import tr from "zod/v4/locales/tr.cjs";
+import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import { NodeSchema } from "../../schemas/node.schema.js";
+import { converterUtils } from "../../utils/converter.utils.js";
 
 export class ExecutionWorker {
   private readonly worker: Worker<QueueJobData>;
@@ -50,15 +51,26 @@ export class ExecutionWorker {
       nodeService.getByIdOrThrow(nodeId),
     ]);
 
-    const isLastAttempt = job.attemptsMade >= node.max_attempts - 1;
     let result: ExecutorResult = {
       status: TaskStatuses.FAILED,
       outputVariables: {},
       nextNodeId: null,
     };
     let executionThrew = false;
+    let isLastAttempt = true;
 
     try {
+      let maxAttempts = 1;
+      const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
+      if (
+        nodeSchema.type === NodeTypes.SCRIPT ||
+        nodeSchema.type === NodeTypes.SERVICE
+      ) {
+        maxAttempts = nodeSchema.configuration.maxAttempts;
+      }
+
+      isLastAttempt = job.attemptsMade >= maxAttempts - 1;
+
       engineUtils.validateInstanceCanExecuteOrThrow(instance);
       const executionContext = taskService.getTaskContext(instance, node);
 
