@@ -9,7 +9,11 @@ import { instanceService } from "../../services/instance.service.js";
 import { nodeService } from "../../services/node.services.js";
 import TaskExecutor from "../executors/TaskExecutor.js";
 import type { Logger } from "pino";
-import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import {
+  NodeTypes,
+  TaskStatuses,
+  InstanceStatuses,
+} from "../../types/enums.js";
 import { NodeSchema } from "../../schemas/node.schema.js";
 import { converterUtils } from "../../utils/converter.utils.js";
 
@@ -51,6 +55,23 @@ export class ExecutionWorker {
       nodeService.getByIdOrThrow(nodeId),
     ]);
 
+    // Check instance state before execution
+    if (instance.status === InstanceStatuses.PAUSED) {
+      this.logger.info(
+        { instanceId, taskId },
+        "Instance is paused, stopping execution loop",
+      );
+      return;
+    }
+
+    if (instance.status === InstanceStatuses.TERMINATED) {
+      this.logger.info(
+        { instanceId, taskId },
+        "Instance is terminated, exiting immediately",
+      );
+      return;
+    }
+
     let result: ExecutorResult = {
       status: TaskStatuses.FAILED,
       outputVariables: {},
@@ -78,6 +99,23 @@ export class ExecutionWorker {
       this.logger.info(node.configuration, `Executing ${node.type} node`);
 
       result = await executor.run(executionContext);
+
+      // Re-check instance state after execution (may have been paused/terminated during long-running task)
+      const freshInstance = await instanceService.getById(instanceId);
+      if (freshInstance.status === InstanceStatuses.PAUSED) {
+        this.logger.info(
+          { instanceId, taskId },
+          "Instance was paused during task execution, discarding result and stopping",
+        );
+        return;
+      }
+      if (freshInstance.status === InstanceStatuses.TERMINATED) {
+        this.logger.info(
+          { instanceId, taskId },
+          "Instance was terminated during task execution, discarding result",
+        );
+        return;
+      }
     } catch (err) {
       if (isLastAttempt) {
         await engineUtils.onExecutionFailure(err, task);

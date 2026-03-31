@@ -31,8 +31,28 @@ async function handleNextNode(
     throw new DataIntegrityError(`Node not found node id = ${nextNodeId}`);
   }
 
-  if (nextNode && instance.auto_advance) {
-    await taskService.create(nextNode, instance);
+  // Re-fetch instance to get current state (may have been paused/terminated since transaction)
+  const freshInstance = await instanceService.getById(instance.id);
+
+  // Check if instance is still eligible for auto-advance
+  if (freshInstance.status === InstanceStatuses.PAUSED) {
+    getLogger().info(
+      { instanceId: instance.id },
+      "Instance is paused, not creating next task",
+    );
+    return;
+  }
+
+  if (freshInstance.status === InstanceStatuses.TERMINATED) {
+    getLogger().info(
+      { instanceId: instance.id },
+      "Instance is terminated, not creating next task",
+    );
+    return;
+  }
+
+  if (nextNode && freshInstance.auto_advance) {
+    await taskService.create(nextNode, freshInstance);
   }
 }
 
@@ -100,7 +120,9 @@ async function applyInstanceUpdate(
   transaction: Transaction<DB>,
 ): Promise<InstanceModel> {
   if (node.type === NodeTypes.END && result.status === TaskStatuses.COMPLETED) {
-    const details = { message: `Instance completed: End Message - ${result.outputVariables?.message || "no message"}` };
+    const details = {
+      message: `Instance completed: End Message - ${result.outputVariables?.message || "no message"}`,
+    };
     return await instanceService.complete(
       instance.id,
       result.outputVariables,
@@ -194,13 +216,40 @@ export const engineUtils = {
         wasLastAttempt,
       );
 
-      const instanceContext = getUpdatedInstanceContext(
-        node,
-        result.outputVariables,
-        instance,
-      );
-
       updatedInstance = await db.transaction().execute(async (transaction) => {
+        // Re-fetch instance inside transaction to get current state
+        const freshInstance = await instanceService.getById(instance.id);
+
+        // If instance was paused/terminated during execution, preserve that state
+        if (freshInstance.status === InstanceStatuses.PAUSED) {
+          getLogger().info(
+            { instanceId: instance.id },
+            "Instance is paused, preserving paused state and completing task only",
+          );
+          // Only complete the task, don't update instance status or context
+          if (result.status === TaskStatuses.COMPLETED) {
+            await taskService.complete(task, transaction);
+          }
+          return freshInstance;
+        }
+
+        if (freshInstance.status === InstanceStatuses.TERMINATED) {
+          getLogger().info(
+            { instanceId: instance.id },
+            "Instance is terminated, completing task only",
+          );
+          if (result.status === TaskStatuses.COMPLETED) {
+            await taskService.complete(task, transaction);
+          }
+          return freshInstance;
+        }
+
+        const instanceContext = getUpdatedInstanceContext(
+          node,
+          result.outputVariables,
+          freshInstance,
+        );
+
         if (result.status === TaskStatuses.COMPLETED) {
           await taskService.complete(task, transaction);
         } else if (wasLastAttempt) {
@@ -210,7 +259,7 @@ export const engineUtils = {
         }
 
         return await applyInstanceUpdate(
-          instance,
+          freshInstance,
           node,
           result,
           instanceStatus,

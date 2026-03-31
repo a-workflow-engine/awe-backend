@@ -17,3 +17,18 @@ instanceRouter.post(
   authenticateRequest,
   instanceController.advance,
 );
+instanceRouter.post(
+  "/:instanceId/pause",
+  authenticateRequest,
+  instanceController.pause,
+);
+instanceRouter.post(
+  "/:instanceId/resume",
+  authenticateRequest,
+  instanceController.resume,
+);
+instanceRouter.post(
+  "/:instanceId/terminate",
+  authenticateRequest,
+  instanceController.terminate,
+);

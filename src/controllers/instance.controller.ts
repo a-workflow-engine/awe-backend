@@ -92,6 +92,42 @@ export const instanceController = {
 
     const executions =
       await taskExecutionRepository.findByInstanceId(instanceId);
+
+    // Cache execution logs for 5 seconds (they change frequently during execution)
+    res.setHeader("Cache-Control", "private, max-age=5");
+
     return res.json({ executions });
+  },
+
+  pause: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const instance = await instanceService.pause(instanceId, req.actor.id);
+    return res.json({
+      id: instance.id,
+      status: instance.status,
+      currentNodeId: instance.current_node_id,
+      pausedAt: new Date().toISOString(),
+    });
+  },
+
+  resume: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const instance = await instanceService.resume(instanceId, req.actor);
+    return res.json({
+      id: instance.id,
+      status: instance.status,
+      currentNodeId: instance.current_node_id,
+      resumedAt: new Date().toISOString(),
+    });
+  },
+
+  terminate: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const instance = await instanceService.terminate(instanceId, req.actor.id);
+    return res.json({
+      id: instance.id,
+      status: instance.status,
+      terminatedAt: instance.ended_on,
+    });
   },
 };
