@@ -66,6 +66,9 @@ type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
 
 const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
 
+const JSONPATH_REGEX =
+/^\$(?:\.(?:[a-zA-Z_][a-zA-Z0-9_-]*|\*)|\[(?:\d+|\*|'[^']+'|"[^"]+")\]|\.\.)*$/;
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -123,16 +126,8 @@ function validateContextReferences(
 }
 
 function isValidJsonPath(path: string): boolean {
-  try {
-    JSONPath({
-      path,
-      json: {},
-      wrap: false,
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  if (!path) return false;
+  return JSONPATH_REGEX.test(path.trim());
 }
 
 function validateJsonPath(
@@ -159,32 +154,6 @@ function validateJsonPath(
     return false;
   }
 
-  return true;
-}
-
-function validateBodyJsonPath(
-  jsonPath: string | undefined,
-  nodeId: string,
-  message: string,
-  errors: ValidationError[],
-): boolean {
-  if (!jsonPath?.trim()) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_JSON_PATH,
-      message,
-      nodeId,
-    });
-    return false;
-  }
-  const parts = jsonPath.split(".").filter(Boolean);
-  if (parts.length === 0) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_JSON_PATH,
-      message: `${message} - path must not be empty`,
-      nodeId,
-    });
-    return false;
-  }
   return true;
 }
 
