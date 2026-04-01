@@ -5,7 +5,7 @@ import {
   InstanceParamsSchema,
 } from "../schemas/instance.schema.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
+import { taskExecutionService } from "../services/taskExecution.service.js";
 import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
@@ -90,8 +90,8 @@ export const instanceController = {
     if (!instance)
       throw new NotFoundError(`Instance id=${instanceId} not found`);
 
-    const executions =
-      await taskExecutionRepository.findByInstanceId(instanceId);
-    return res.json({ executions });
+    const executionLogs =
+      await taskExecutionService.getExecutionLogs(instanceId);
+    return res.json(executionLogs);
   },
 };
