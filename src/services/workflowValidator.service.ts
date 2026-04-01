@@ -18,6 +18,7 @@ import {
 } from "../utils/feel.utils.js";
 import { graphUtils } from "../utils/graph.utils.js";
 import { parser as pythonParser } from "@lezer/python";
+import { JSONPath } from "jsonpath-plus";
 
 export type ValidationError = {
   code: number;
@@ -64,7 +65,6 @@ export enum ValidationErrorCode {
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
 
 const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
-const JSON_PATH_PART_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -122,10 +122,17 @@ function validateContextReferences(
   }
 }
 
-function isStrictJsonPath(path: string): boolean {
-  const parts = path.split(".").filter(Boolean);
-  if (parts.length === 0) return false;
-  return parts.every((part) => JSON_PATH_PART_REGEX.test(part));
+function isValidJsonPath(path: string): boolean {
+  try {
+    JSONPath({
+      path,
+      json: {},
+      wrap: false,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function validateJsonPath(
@@ -143,10 +150,10 @@ function validateJsonPath(
     return false;
   }
 
-  if (!isStrictJsonPath(jsonPath)) {
+  if (!isValidJsonPath(jsonPath)) {
     errors.push({
       code: ValidationErrorCode.INVALID_JSON_PATH,
-      message: `${message} - must be a dot-separated identifier path (e.g. a.b.c)`,
+      message: `${message} - must be a valid JSONPath expression`,
       nodeId,
     });
     return false;
