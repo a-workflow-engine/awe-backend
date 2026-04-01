@@ -2,18 +2,19 @@ import { GoogleGenAI } from "@google/genai";
 import Config from "../config";
 import type { ScriptExecutionResult } from "../types/script.execution";
 import { buildGeminiPrompt } from "../utils/scriptExecution.utils";
+import type { ScriptExecutionService } from "../types/script.execution";
 
-const genAI = new GoogleGenAI({ apiKey: Config.GEMINI_API_KEY! });
+export class GeminiService implements ScriptExecutionService {
+  private genAI = new GoogleGenAI({ apiKey: Config.GEMINI_API_KEY! });
 
-export class GeminiService {
-  static async executeScript(
+  async executeScript(
     sourceCode: string,
     entryFunctionName: string,
     parameters: any[],
   ): Promise<ScriptExecutionResult> {
     const prompt = buildGeminiPrompt(sourceCode, entryFunctionName, parameters);
 
-    const result = await genAI.models.generateContent({
+    const result = await this.genAI.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [prompt],
       config: {
