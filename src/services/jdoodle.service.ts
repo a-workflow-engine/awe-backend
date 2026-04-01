@@ -5,6 +5,7 @@ import {
   buildJDoodleStdin,
   wrapScriptForJDoodle,
 } from "../utils/scriptExecution.utils";
+import type { ScriptExecutionService } from "../types/script.execution";
 
 export interface JDoodleResponse {
   output: string;
@@ -13,8 +14,8 @@ export interface JDoodleResponse {
   cpuTime: string;
 }
 
-export class JDoodleService {
-  static async executeScript(
+export class JDoodleService implements ScriptExecutionService {
+  async executeScript(
     sourceCode: string,
     entryFunctionName: string,
     parameters: any[],
