@@ -16,6 +16,14 @@ export const queueService = {
     await bullMQQueue.enqueue(job, maxAttempts, backoffType, backoffDelay);
   },
 
+  removeJob: async (jobId: string): Promise<void> => {
+    await bullMQQueue.removeJob(jobId);
+  },
+
+  getJob: async (jobId: string) => {
+    return await bullMQQueue.getJob(jobId);
+  },
+
   startWorker: (): void => {
     workerInstance = new ExecutionWorker(redisConnectionOptions);
   },

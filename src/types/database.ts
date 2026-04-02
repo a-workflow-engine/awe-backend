@@ -57,7 +57,7 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
-export type TaskStatus = "completed" | "failed" | "in_progress" | "terminated";
+export type TaskStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -716,6 +716,11 @@ export interface TaskExecution {
   task_id: string;
 }
 
+export interface TempoEmps {
+  id: number;
+  name: string;
+}
+
 export interface UserTaskExecution {
   assignee: string | null;
   created_on: Generated<Timestamp>;
@@ -826,6 +831,7 @@ export interface DB {
   system: System;
   task: Task;
   task_execution: TaskExecution;
+  tempo_emps: TempoEmps;
   user_task_execution: UserTaskExecution;
   "vault.decrypted_secrets": VaultDecryptedSecrets;
   "vault.secrets": VaultSecrets;

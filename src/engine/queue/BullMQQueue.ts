@@ -2,6 +2,7 @@ import { Queue } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
 import Config from "../../config.js";
 import type { QueueJobData } from "../../types/engine.js";
+import { getLogger } from "../../logger.js";
 
 export class BullMQQueue {
   readonly queue: Queue<QueueJobData>;
@@ -28,6 +29,33 @@ export class BullMQQueue {
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 5000 },
     });
+  }
+
+  async removeJob(jobId: string): Promise<void> {
+    const logger = getLogger();
+    try {
+      const job = await this.queue.getJob(jobId);
+      if (job) {
+        await job.remove();
+        logger.debug({ jobId }, "Job removed from queue");
+      }
+    } catch (err) {
+      // Job may be locked by a worker currently processing it
+      // This is expected if the instance is paused while executing
+      // The worker will check instance state and handle accordingly
+      if (err instanceof Error && err.message.includes("locked")) {
+        logger.info(
+          { jobId, error: err.message },
+          "Job is currently being processed by worker, will complete naturally",
+        );
+        return;
+      }
+      throw err;
+    }
+  }
+
+  async getJob(jobId: string) {
+    return await this.queue.getJob(jobId);
   }
 
   async close(): Promise<void> {

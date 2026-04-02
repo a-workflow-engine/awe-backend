@@ -7,7 +7,11 @@ import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { LogEventTypes, InstanceStatuses } from "../types/enums.js";
+import {
+  LogEventTypes,
+  InstanceStatuses,
+  TaskStatuses,
+} from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
@@ -22,6 +26,7 @@ import { getLogger } from "../logger.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
+import { queueService } from "./queue.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -316,6 +321,27 @@ export const instanceService = {
     }
 
     return await db.transaction().execute(async (transaction) => {
+      const currentTask =
+        await taskRepository.findLatestByInstanceId(instanceId);
+      if (currentTask) {
+        const finalStatuses: string[] = [
+          TaskStatuses.COMPLETED,
+          TaskStatuses.FAILED,
+          TaskStatuses.PAUSED,
+          TaskStatuses.TERMINATED,
+        ];
+        if (!finalStatuses.includes(currentTask.status)) {
+          await taskRepository.updateById(
+            currentTask.id,
+            { status: TaskStatuses.PAUSED },
+            transaction,
+          );
+        }
+
+        // Remove job from queue (idempotent - safe if already removed)
+        await queueService.removeJob(currentTask.id);
+      }
+
       const updatedInstance = await instanceRepository.updateById(
         instanceId,
         {
@@ -375,7 +401,22 @@ export const instanceService = {
           updatedInstance.current_node_id,
         );
         if (nextNode) {
-          await taskService.create(nextNode, updatedInstance, transaction);
+          // Check if there's already a job in the queue for this instance
+          // to ensure idempotency (no duplicate jobs)
+          const latestTask =
+            await taskRepository.findLatestByInstanceId(instanceId);
+          const existingJob = latestTask
+            ? await queueService.getJob(latestTask.id)
+            : null;
+
+          if (!existingJob) {
+            await taskService.create(nextNode, updatedInstance, transaction);
+          } else {
+            getLogger().info(
+              { instanceId, taskId: latestTask?.id },
+              "Job already exists in queue, skipping duplicate task creation",
+            );
+          }
         }
       }
 
@@ -403,6 +444,26 @@ export const instanceService = {
     }
 
     return await db.transaction().execute(async (transaction) => {
+      const currentTask =
+        await taskRepository.findLatestByInstanceId(instanceId);
+      if (currentTask) {
+        const finalStatuses: string[] = [
+          TaskStatuses.COMPLETED,
+          TaskStatuses.FAILED,
+          TaskStatuses.TERMINATED,
+        ];
+        if (!finalStatuses.includes(currentTask.status)) {
+          await taskRepository.updateById(
+            currentTask.id,
+            { status: TaskStatuses.TERMINATED },
+            transaction,
+          );
+        }
+
+        // Remove job from queue (idempotent - safe if already removed or never queued)
+        await queueService.removeJob(currentTask.id);
+      }
+
       const updatedInstance = await instanceRepository.updateById(
         instanceId,
         {

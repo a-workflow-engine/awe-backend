@@ -49,6 +49,7 @@ export const TaskStatuses = {
   FAILED: "failed",
   IN_PROGRESS: "in_progress",
   TERMINATED: "terminated",
+  PAUSED: "paused",
 } as const satisfies Record<string, TaskStatus>;
 
 export const InstanceEntityTypes = {
