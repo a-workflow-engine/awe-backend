@@ -107,10 +107,9 @@ const ServiceResponseSchema = z.object({
 const BackoffSchema = z
   .object({
     type: z.enum(["fixed", "exponential"]),
-    delayMs: z.number().positive(),
+    delay: z.number().positive().optional().default(1000),
+    unit: z.enum(["millisecond", "second", "minute"]).optional().default("millisecond"),
   })
-  .optional()
-  .default({ type: "fixed", delayMs: 1000 });
 
 export const ServiceNodeConfigurationSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),

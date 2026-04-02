@@ -19,6 +19,7 @@ import { engineUtils } from "../utils/engine.utils.js";
 import { EngineError } from "../errors/EngineError.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
+import { convertToMilliseconds } from "../utils/time.utils.js";
 
 export const taskService = {
   getById: async (taskId: string): Promise<TaskModel> => {
@@ -88,11 +89,14 @@ export const taskService = {
         nodeSchema.type === NodeTypes.SERVICE ||
         nodeSchema.type === NodeTypes.SCRIPT
       ) {
-        attempts.delay = nodeSchema.configuration.backoff.delayMs;
+        attempts.delay = convertToMilliseconds(
+          nodeSchema.configuration.backoff.delay,
+          nodeSchema.configuration.backoff.unit,
+        );
         attempts.type = nodeSchema.configuration.backoff.type;
         attempts.max = nodeSchema.configuration.maxAttempts;
       }
-
+      console.log(attempts);
       if (node.type !== NodeTypes.USER) {
         await queueService
           .enqueue(
