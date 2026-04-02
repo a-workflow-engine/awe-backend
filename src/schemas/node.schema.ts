@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FeelDataType, NodeTypes } from "../types/enums.js";
+import { FeelDataType, NodeTypes, TimeUnit } from "../types/enums.js";
 
 export const FeelDataTypeSchema = z.enum([
   FeelDataType.NUMBER,
@@ -108,7 +108,7 @@ const BackoffSchema = z
   .object({
     type: z.enum(["fixed", "exponential"]),
     delay: z.number().positive().optional().default(1000),
-    unit: z.enum(["millisecond", "second", "minute"]).optional().default("millisecond"),
+    unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
   })
 
 export const ServiceNodeConfigurationSchema = z.object({
