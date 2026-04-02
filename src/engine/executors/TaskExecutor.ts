@@ -2,7 +2,11 @@ import { EngineError } from "../../errors/EngineError";
 import { taskExecutionService } from "../../services/taskExecution.service";
 import type { ContextVariables, ExecutorResult } from "../../types/engine";
 import { NodeTypes, TaskStatuses } from "../../types/enums";
-import type { NodeModel, TaskModel } from "../../types/models";
+import type {
+  NodeModel,
+  TaskExecutionModel,
+  TaskModel,
+} from "../../types/models";
 import type { BaseExecutor } from "./BaseExecutor";
 import { DecisionNodeExecutor } from "./DecisionNodeExecutor";
 import { EndNodeExecutor } from "./EndNodeExecutor";
@@ -35,44 +39,45 @@ export default class TaskExecutor {
     this.executor = executor;
   }
 
-  async run(context: ContextVariables): Promise<ExecutorResult> {
-    const taskExecution = await taskExecutionService.create(this.task, context);
-
-    let result;
-
-    try {
-      result = await this.executor.execute(this.node, context);
-    } catch (err) {
-      let message = "Unkown error";
-      if (err instanceof Error) {
-        message = err.message;
-      }
-      await taskExecutionService.fail(this.task.instance_id, taskExecution.id, {
-        message,
-        error: err,
+  async run(
+    context: ContextVariables,
+  ): Promise<{ executionId: string; result: ExecutorResult }> {
+    const taskExecution = await taskExecutionService.create(
+      this.task.instance_id,
+      this.task.id,
+      context,
+    );
+    const result = await this.executor
+      .execute(this.node, context)
+      .catch((err: Error) => {
+        return {
+          status: TaskStatuses.FAILED,
+          outputVariables: {},
+          nextNodeId: null,
+          errorMessage: err.message,
+          error: err,
+        };
       });
 
-      return {
-        status: TaskStatuses.FAILED,
-        outputVariables: {},
-        nextNodeId: null,
-        errorMessage: message,
-      };
-    }
+    return {
+      executionId: taskExecution.id,
+      result,
+    };
+  }
 
+  async end(executionId: string, result: ExecutorResult) {
     if (result.status === TaskStatuses.COMPLETED) {
       await taskExecutionService.complete(
         this.task.instance_id,
-        taskExecution.id,
+        executionId,
         result.outputVariables,
       );
-
-      return result;
+      return;
     }
 
-    await taskExecutionService.fail(this.task.instance_id, taskExecution.id, {
+    await taskExecutionService.fail(this.task.instance_id, executionId, {
       message: result.errorMessage ?? "Unkown error",
+      error: result.error,
     });
-    return result;
   }
 }

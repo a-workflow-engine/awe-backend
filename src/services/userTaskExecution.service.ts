@@ -156,7 +156,7 @@ export const userTaskService = {
     }
 
     const { userTaskExecution, taskExecution, node, workflow } = models;
-    const task = await taskService.getById(taskExecution.task_id);
+    const task = await taskService.getByIdOrThrow(taskExecution.task_id);
 
     if (taskExecution.status !== TaskStatuses.IN_PROGRESS) {
       throw new StateTransitionError(
@@ -221,7 +221,7 @@ export const userTaskService = {
       nextNodeId: nextNodeId ?? null,
     };
 
-    await engineUtils.updateInstanceAndTask(instance, node, task, result, true);
+    await engineUtils.updateInstanceAndTask(instance, node, task, result);
 
     return { taskExecution: updatedtaskExecution, userTaskExecution };
   },

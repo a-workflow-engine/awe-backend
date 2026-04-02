@@ -31,28 +31,8 @@ async function handleNextNode(
     throw new DataIntegrityError(`Node not found node id = ${nextNodeId}`);
   }
 
-  // Re-fetch instance to get current state (may have been paused/terminated since transaction)
-  const freshInstance = await instanceService.getById(instance.id);
-
-  // Check if instance is still eligible for auto-advance
-  if (freshInstance.status === InstanceStatuses.PAUSED) {
-    getLogger().info(
-      { instanceId: instance.id },
-      "Instance is paused, not creating next task",
-    );
-    return;
-  }
-
-  if (freshInstance.status === InstanceStatuses.TERMINATED) {
-    getLogger().info(
-      { instanceId: instance.id },
-      "Instance is terminated, not creating next task",
-    );
-    return;
-  }
-
-  if (nextNode && freshInstance.auto_advance) {
-    await taskService.create(nextNode, freshInstance);
+  if (nextNode && instance.auto_advance) {
+    await taskService.create(nextNode, instance);
   }
 }
 
@@ -83,7 +63,6 @@ function getUpdatedInstanceStatus(
   isAutoAdvance: boolean,
   result: ExecutorResult,
   nodeType: NodeType,
-  wasLastAttempt: boolean,
 ) {
   let instanceStatus: InstanceStatus;
 
@@ -97,8 +76,8 @@ function getUpdatedInstanceStatus(
   } else if (nodeType === NodeTypes.END) {
     instanceStatus = InstanceStatuses.COMPLETED;
   } else if (
-    wasLastAttempt &&
-    (result.nextNodeId === null || result.status === TaskStatuses.FAILED)
+    result.nextNodeId === null ||
+    result.status === TaskStatuses.FAILED
   ) {
     instanceStatus = InstanceStatuses.FAILED;
   } else {
@@ -116,7 +95,6 @@ async function applyInstanceUpdate(
   result: ExecutorResult,
   instanceStatus: InstanceStatus,
   instanceContext: ContextVariables,
-  wasLastAttempt: boolean,
   transaction: Transaction<DB>,
 ): Promise<InstanceModel> {
   if (node.type === NodeTypes.END && result.status === TaskStatuses.COMPLETED) {
@@ -132,8 +110,8 @@ async function applyInstanceUpdate(
   }
 
   if (
-    wasLastAttempt &&
-    (instanceStatus === InstanceStatuses.FAILED || result.nextNodeId === null)
+    instanceStatus === InstanceStatuses.FAILED ||
+    result.nextNodeId === null
   ) {
     return await instanceService.fail(
       instance.id,
@@ -164,12 +142,32 @@ export const engineUtils = {
       instance.status === InstanceStatuses.COMPLETED
     ) {
       throw new StateTransitionError(
-        `Instance has ${instance.status}. Cannot execute next node.`,
+        `Instance has ended with status=${instance.status}.`,
       );
     }
 
     if (instance.auto_advance && instance.status === InstanceStatuses.PAUSED) {
-      throw new StateTransitionError(`Instance is ${InstanceStatuses.PAUSED}`);
+      throw new StateTransitionError(
+        `Instance is ${instance.status}. Cannot execute next task.`,
+      );
+    }
+  },
+
+  validateTaskCanExecuteOrThrow: (task: TaskModel) => {
+    if (
+      task.status === TaskStatuses.FAILED ||
+      task.status === TaskStatuses.TERMINATED ||
+      task.status === TaskStatuses.COMPLETED
+    ) {
+      throw new StateTransitionError(
+        `Task has ended with status=${task.status}. Cannot be executed.`,
+      );
+    }
+
+    if (task.status === TaskStatuses.PAUSED) {
+      throw new StateTransitionError(
+        `Task is ${task.status}. Cannot be executed.`,
+      );
     }
   },
 
@@ -192,10 +190,13 @@ export const engineUtils = {
         task.instance_id,
         task.id,
         { message, error: err },
-        error,
         transaction,
       );
-      await instanceService.fail(task.instance_id, { message }, transaction);
+      await instanceService.fail(
+        task.instance_id,
+        { message: "Task failed" },
+        transaction,
+      );
     });
   },
 
@@ -204,7 +205,6 @@ export const engineUtils = {
     node: NodeModel,
     task: TaskModel,
     result: ExecutorResult,
-    wasLastAttempt: boolean,
   ) => {
     let updatedInstance;
 
@@ -213,58 +213,29 @@ export const engineUtils = {
         instance.auto_advance,
         result,
         node.type,
-        wasLastAttempt,
       );
 
       updatedInstance = await db.transaction().execute(async (transaction) => {
-        // Re-fetch instance inside transaction to get current state
-        const freshInstance = await instanceService.getById(instance.id);
-
-        // If instance was paused/terminated during execution, preserve that state
-        if (freshInstance.status === InstanceStatuses.PAUSED) {
-          getLogger().info(
-            { instanceId: instance.id },
-            "Instance is paused, preserving paused state and completing task only",
-          );
-          // Only complete the task, don't update instance status or context
-          if (result.status === TaskStatuses.COMPLETED) {
-            await taskService.complete(task, transaction);
-          }
-          return freshInstance;
-        }
-
-        if (freshInstance.status === InstanceStatuses.TERMINATED) {
-          getLogger().info(
-            { instanceId: instance.id },
-            "Instance is terminated, completing task only",
-          );
-          if (result.status === TaskStatuses.COMPLETED) {
-            await taskService.complete(task, transaction);
-          }
-          return freshInstance;
-        }
-
         const instanceContext = getUpdatedInstanceContext(
           node,
           result.outputVariables,
-          freshInstance,
+          instance,
         );
 
         if (result.status === TaskStatuses.COMPLETED) {
           await taskService.complete(task, transaction);
-        } else if (wasLastAttempt) {
+        } else {
           await taskService.fail(instance.id, task.id, {
             message: `Execution ${result.status}`,
           });
         }
 
         return await applyInstanceUpdate(
-          freshInstance,
+          instance,
           node,
           result,
           instanceStatus,
           instanceContext,
-          wasLastAttempt,
           transaction,
         );
       });

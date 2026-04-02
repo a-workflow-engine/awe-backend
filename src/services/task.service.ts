@@ -21,7 +21,7 @@ import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 
 export const taskService = {
-  getById: async (taskId: string): Promise<TaskModel> => {
+  getByIdOrThrow: async (taskId: string): Promise<TaskModel> => {
     const task = await taskRepository.findById(taskId);
     if (!task) {
       throw new NotFoundError("Task");
@@ -118,7 +118,8 @@ export const taskService = {
         const executionContext = taskService.getTaskContext(instance, node);
 
         const taskExecution = await taskExecutionService.create(
-          task,
+          instance.id,
+          task.id,
           executionContext,
           transaction,
         );
@@ -145,16 +146,14 @@ export const taskService = {
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {
-    let instanceContext: ContextVariables = {
-      constants: {},
-      fetchables: {},
-      urls: {},
-    };
+    let instanceContext: ContextVariables;
 
     if (node.type === NodeTypes.START) {
-      instanceContext.constants = converterUtils.jsonValueToObject(
-        instance.input_variables,
-      );
+      instanceContext = {
+        constants: converterUtils.jsonValueToObject(instance.input_variables),
+        fetchables: {},
+        urls: {},
+      };
     } else {
       instanceContext = converterUtils.jsonValueToContextVariables(
         instance.current_variables,
@@ -197,11 +196,10 @@ export const taskService = {
     instanceId: string,
     taskId: string,
     details: LogDetailSchema,
-    error?: Error,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
     const logger = getLogger();
-    logger.info({ details, error }, `[Task] ${details.message}`);
+    logger.info({ details }, `Task id=${taskId} failed`);
 
     const executeCallback = async (transaction: Transaction<DB>) => {
       const [task] = await Promise.all([

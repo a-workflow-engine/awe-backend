@@ -23,6 +23,7 @@ export interface ExecutorResult {
   outputVariables: Record<string, unknown>; // variableName: value
   nextNodeId: string | null;
   errorMessage?: string;
+  error?: object;
 }
 
 export interface QueueJobData {

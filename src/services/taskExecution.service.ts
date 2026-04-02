@@ -54,7 +54,9 @@ type ExecutionTimelineItem = {
   }[];
 };
 
-const getNodeStatusFromExecutions = (statuses: string[]): ExecutionNodeStatus => {
+const getNodeStatusFromExecutions = (
+  statuses: string[],
+): ExecutionNodeStatus => {
   if (statuses.length === 0) {
     return "pending";
   }
@@ -99,7 +101,10 @@ const getLatestTaskExecution = (
 const computeNodeOrder = (
   nodes: { node_id: string; created_on: Date; node_type: string }[],
   connections: { source_node_id: string; destination_node_id: string | null }[],
-): { orderByNodeId: Map<string, number>; levelByNodeId: Map<string, number> } => {
+): {
+  orderByNodeId: Map<string, number>;
+  levelByNodeId: Map<string, number>;
+} => {
   const nodeById = new Map(nodes.map((n) => [n.node_id, n]));
   const inDegree = new Map<string, number>();
   const adjacency = new Map<string, string[]>();
@@ -115,7 +120,9 @@ const computeNodeOrder = (
     if (!nodeById.has(connection.source_node_id)) continue;
     if (!nodeById.has(connection.destination_node_id)) continue;
 
-    adjacency.get(connection.source_node_id)?.push(connection.destination_node_id);
+    adjacency
+      .get(connection.source_node_id)
+      ?.push(connection.destination_node_id);
     inDegree.set(
       connection.destination_node_id,
       (inDegree.get(connection.destination_node_id) ?? 0) + 1,
@@ -184,7 +191,10 @@ export const taskExecutionService = {
       await taskExecutionRepository.findExecutionGraphByInstanceId(instanceId);
 
     const { nodes, connections, executions } = executionGraphData;
-    const { orderByNodeId, levelByNodeId } = computeNodeOrder(nodes, connections);
+    const { orderByNodeId, levelByNodeId } = computeNodeOrder(
+      nodes,
+      connections,
+    );
 
     const executionByNodeId = new Map<string, typeof executions>();
     for (const execution of executions) {
@@ -196,7 +206,8 @@ export const taskExecutionService = {
     const workflowNodes: ExecutionFlowNode[] = nodes
       .map((node) => {
         const nodeExecutions = executionByNodeId.get(node.node_id) ?? [];
-        const latestExecution = nodeExecutions[nodeExecutions.length - 1] ?? null;
+        const latestExecution =
+          nodeExecutions[nodeExecutions.length - 1] ?? null;
         const nodeStatus = getNodeStatusFromExecutions(
           nodeExecutions.map((item) => item.status),
         );
@@ -225,39 +236,45 @@ export const taskExecutionService = {
       }),
     );
 
-    const outgoingConnectionsByNodeId = new Map<string, ExecutionFlowConnection[]>();
+    const outgoingConnectionsByNodeId = new Map<
+      string,
+      ExecutionFlowConnection[]
+    >();
     for (const connection of workflowConnections) {
-      const existing = outgoingConnectionsByNodeId.get(connection.sourceNodeId) ?? [];
+      const existing =
+        outgoingConnectionsByNodeId.get(connection.sourceNodeId) ?? [];
       existing.push(connection);
       outgoingConnectionsByNodeId.set(connection.sourceNodeId, existing);
     }
 
-    const executionItems: ExecutionTimelineItem[] = workflowNodes.map((node) => {
-      const outgoingConnections =
-        outgoingConnectionsByNodeId.get(node.nodeId)?.map((connection) => ({
-          destinationNodeId: connection.destinationNodeId,
-          destinationNodeClientId: connection.destinationNodeClientId,
-          conditionExpression: connection.conditionExpression,
-        })) ?? [];
+    const executionItems: ExecutionTimelineItem[] = workflowNodes.map(
+      (node) => {
+        const outgoingConnections =
+          outgoingConnectionsByNodeId.get(node.nodeId)?.map((connection) => ({
+            destinationNodeId: connection.destinationNodeId,
+            destinationNodeClientId: connection.destinationNodeClientId,
+            conditionExpression: connection.conditionExpression,
+          })) ?? [];
 
-      const nodeExecutions = executionByNodeId.get(node.nodeId) ?? [];
-      const latestTaskExecution = getLatestTaskExecution(nodeExecutions);
-      const timelineStatus = toTimelineStatus(node.status);
+        const nodeExecutions = executionByNodeId.get(node.nodeId) ?? [];
+        const latestTaskExecution = getLatestTaskExecution(nodeExecutions);
+        const timelineStatus = toTimelineStatus(node.status);
 
-      return {
-        nodeId: node.nodeId,
-        nodeClientId: node.nodeClientId,
-        nodeType: node.nodeType,
-        nodeName: node.nodeName,
-        order: node.order,
-        status: timelineStatus,
-        startedOn: latestTaskExecution?.started_on ?? null,
-        endedOn: latestTaskExecution?.ended_on ?? null,
-        inputVariables: latestTaskExecution?.input_variables ?? null,
-        outputVariables: latestTaskExecution?.output_variables ?? null,
-        outgoingConnections,
-      };
-    });
+        return {
+          nodeId: node.nodeId,
+          nodeClientId: node.nodeClientId,
+          nodeType: node.nodeType,
+          nodeName: node.nodeName,
+          order: node.order,
+          status: timelineStatus,
+          startedOn: latestTaskExecution?.started_on ?? null,
+          endedOn: latestTaskExecution?.ended_on ?? null,
+          inputVariables: latestTaskExecution?.input_variables ?? null,
+          outputVariables: latestTaskExecution?.output_variables ?? null,
+          outgoingConnections,
+        };
+      },
+    );
 
     return {
       data: {
@@ -267,14 +284,15 @@ export const taskExecutionService = {
   },
 
   create: async (
-    task: TaskModel,
+    instanceId: string,
+    taskId: string,
     inputVariables: ContextVariables,
     transaction?: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
     const executeCallback = async (transaction: Transaction<DB>) => {
       const taskExecution = await taskExecutionRepository.insert(
         {
-          task_id: task.id,
+          task_id: taskId,
           status: TaskStatuses.IN_PROGRESS,
           input_variables: converterUtils.objectToJsonValue(inputVariables),
           started_on: new Date(),
@@ -283,7 +301,7 @@ export const taskExecutionService = {
       );
 
       await eventLogService.createTaskExecutionLog(
-        task.instance_id,
+        instanceId,
         taskExecution.id,
         LogEventTypes.STARTED,
         undefined,
@@ -334,7 +352,6 @@ export const taskExecutionService = {
     instanceId: string,
     taskExecutionId: string,
     details: LogDetailSchema,
-    error?: Error,
   ): Promise<TaskExecutionModel> => {
     return await db.transaction().execute(async (transaction) => {
       const [taskExecution] = await Promise.all([
@@ -342,6 +359,7 @@ export const taskExecutionService = {
           taskExecutionId,
           {
             status: TaskStatuses.FAILED,
+            ended_on: new Date(),
           },
           transaction,
         ),

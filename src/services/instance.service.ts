@@ -157,7 +157,7 @@ export const instanceService = {
     return { instance, workflow_name, workflowVersion, node, task };
   },
 
-  getById: async (instanceId: string): Promise<InstanceModel> => {
+  getByIdOrThrow: async (instanceId: string): Promise<InstanceModel> => {
     const instance = await instanceRepository.findById(instanceId);
     if (!instance) {
       throw new NotFoundError("Instance");
@@ -233,7 +233,7 @@ export const instanceService = {
     transaction?: Transaction<DB>,
   ): Promise<InstanceModel> => {
     const logger = getLogger();
-    logger.info(details, `[Instance] ${details.message}`);
+    logger.info(details, `Instance id=${instanceId} failed`);
 
     const executeCallback = async (transaction: Transaction<DB>) => {
       const [instance] = await Promise.all([

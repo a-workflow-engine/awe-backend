@@ -1,4 +1,4 @@
-import { Worker, type Job } from "bullmq";
+import { UnrecoverableError, Worker, type Job } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
 import Config from "../../config.js";
 import type { ExecutorResult, QueueJobData } from "../../types/engine.js";
@@ -9,13 +9,9 @@ import { instanceService } from "../../services/instance.service.js";
 import { nodeService } from "../../services/node.services.js";
 import TaskExecutor from "../executors/TaskExecutor.js";
 import type { Logger } from "pino";
-import {
-  NodeTypes,
-  TaskStatuses,
-  InstanceStatuses,
-} from "../../types/enums.js";
-import { NodeSchema } from "../../schemas/node.schema.js";
-import { converterUtils } from "../../utils/converter.utils.js";
+import { TaskStatuses, InstanceStatuses } from "../../types/enums.js";
+import type { InstanceModel, TaskModel } from "../../types/models.js";
+import { EngineError } from "../../errors/EngineError.js";
 
 export class ExecutionWorker {
   private readonly worker: Worker<QueueJobData>;
@@ -47,99 +43,71 @@ export class ExecutionWorker {
     await this.worker.close();
   }
 
+  private canExecute(instance: InstanceModel, task: TaskModel): boolean {
+    try {
+      engineUtils.validateInstanceCanExecuteOrThrow(instance);
+      engineUtils.validateTaskCanExecuteOrThrow(task);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        {
+          error: err,
+        },
+        `Cannot execute task id=${task.id} because instance status=${instance.status} and task status=${task.status}`,
+      );
+      return false;
+    }
+  }
+
   private async processJob(job: Job<QueueJobData>): Promise<void> {
     const { instanceId, taskId, nodeId } = job.data;
-    const [instance, task, node] = await Promise.all([
-      instanceService.getById(instanceId),
-      taskService.getById(taskId),
+    let [instance, task, node] = await Promise.all([
+      instanceService.getByIdOrThrow(instanceId),
+      taskService.getByIdOrThrow(taskId),
       nodeService.getByIdOrThrow(nodeId),
     ]);
 
-    // Check instance state before execution
-    if (instance.status === InstanceStatuses.PAUSED) {
-      this.logger.info(
-        { instanceId, taskId },
-        "Instance is paused, stopping execution loop",
-      );
+    if (this.canExecute(instance, task) === false) {
       return;
     }
 
-    if (instance.status === InstanceStatuses.TERMINATED) {
-      this.logger.info(
-        { instanceId, taskId },
-        "Instance is terminated, exiting immediately",
-      );
-      return;
-    }
-
-    let result: ExecutorResult = {
-      status: TaskStatuses.FAILED,
-      outputVariables: {},
-      nextNodeId: null,
-    };
-    let executionThrew = false;
-    let isLastAttempt = true;
+    this.logger.info(
+      node.configuration,
+      `Executing task id=${task.id} type=${node.type}. Attempt: ${job.attemptsMade + 1}/${job.opts.attempts}`,
+    );
 
     try {
-      let maxAttempts = 1;
-      const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
-      if (
-        nodeSchema.type === NodeTypes.SCRIPT ||
-        nodeSchema.type === NodeTypes.SERVICE
-      ) {
-        maxAttempts = nodeSchema.configuration.maxAttempts;
-      }
-
-      isLastAttempt = job.attemptsMade >= maxAttempts - 1;
-
-      engineUtils.validateInstanceCanExecuteOrThrow(instance);
       const executionContext = taskService.getTaskContext(instance, node);
 
       const executor = new TaskExecutor(task, node);
-      this.logger.info(node.configuration, `Executing ${node.type} node`);
+      const { executionId, result } = await executor.run(executionContext);
 
-      result = await executor.run(executionContext);
+      [instance, task] = await Promise.all([
+        instanceService.getByIdOrThrow(instanceId),
+        taskService.getByIdOrThrow(taskId),
+      ]);
 
-      // Re-check instance state after execution (may have been paused/terminated during long-running task)
-      const freshInstance = await instanceService.getById(instanceId);
-      if (freshInstance.status === InstanceStatuses.PAUSED) {
-        this.logger.info(
-          { instanceId, taskId },
-          "Instance was paused during task execution, discarding result and stopping",
-        );
+      if (this.canExecute(instance, task) === false) {
+        this.logger.warn("Discarding task execution result.");
         return;
       }
-      if (freshInstance.status === InstanceStatuses.TERMINATED) {
-        this.logger.info(
-          { instanceId, taskId },
-          "Instance was terminated during task execution, discarding result",
-        );
+
+      await executor.end(executionId, result);
+
+      const isLastAttempt = job.attemptsMade + 1 === job.opts.attempts;
+
+      if (result.status === TaskStatuses.COMPLETED || isLastAttempt) {
+        await engineUtils.updateInstanceAndTask(instance, node, task, result);
         return;
       }
     } catch (err) {
-      if (isLastAttempt) {
-        await engineUtils.onExecutionFailure(err, task);
-        return;
-      }
+      await engineUtils.onExecutionFailure(err, task);
 
-      this.logger.warn(
-        { error: err },
-        `[Worker] Job ${job.id} failed on attempt ${job.attemptsMade + 1}/${node.max_attempts}`,
+      throw new UnrecoverableError(
+        err instanceof Error ? err.message : "Unknown error",
       );
-
-      executionThrew = true;
     }
 
-    await engineUtils.updateInstanceAndTask(
-      instance,
-      node,
-      task,
-      result,
-      isLastAttempt,
-    );
-
-    if (result.status !== TaskStatuses.COMPLETED || executionThrew === true) {
-      throw new Error();
-    }
+    throw new EngineError("Task execution failed");
   }
 }
