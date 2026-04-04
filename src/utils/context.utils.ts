@@ -60,9 +60,10 @@ export const contextUtils = {
           );
         }
 
-        fetchedResponses[urlId] = await httpService.get(url, {
+        const response = await httpService.get(url, {
           headers: urlSettings.headers,
         });
+        fetchedResponses[urlId] = response.data;
       }
 
       const varValue = contextUtils.getByJsonPath(
@@ -71,7 +72,7 @@ export const contextUtils = {
       );
       if (!isValidFeelType(varValue, dataType)) {
         throw new EngineError(
-          `Fetchable ${varName} must be of type ${dataType}`,
+          `Fetchable ${varName} must be of type ${dataType}. Received type = ${typeof varValue}`,
         );
       }
 

@@ -73,7 +73,7 @@ export class ServiceNodeExecutor extends BaseExecutor<
 
     const response = await httpService.request(this.configuration.method, url, {
       headers,
-      ...(this.configuration.body ?? { body: requestBody }),
+      ...(this.configuration.body !== undefined ? { body: requestBody } : {}),
     });
 
     for (const dataMap of this.configuration.responseMap) {

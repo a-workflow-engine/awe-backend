@@ -1,7 +1,7 @@
 import { UnrecoverableError, Worker, type Job } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
 import Config from "../../config.js";
-import type { ExecutorResult, QueueJobData } from "../../types/engine.js";
+import type { QueueJobData } from "../../types/engine.js";
 import { getLogger } from "../../logger.js";
 import { taskService } from "../../services/task.service.js";
 import { engineUtils } from "../../utils/engine.utils.js";
@@ -9,7 +9,7 @@ import { instanceService } from "../../services/instance.service.js";
 import { nodeService } from "../../services/node.services.js";
 import TaskExecutor from "../executors/TaskExecutor.js";
 import type { Logger } from "pino";
-import { TaskStatuses, InstanceStatuses } from "../../types/enums.js";
+import { TaskStatuses } from "../../types/enums.js";
 import type { InstanceModel, TaskModel } from "../../types/models.js";
 import { EngineError } from "../../errors/EngineError.js";
 
@@ -81,17 +81,6 @@ export class ExecutionWorker {
 
       const executor = new TaskExecutor(task, node);
       const { executionId, result } = await executor.run(executionContext);
-
-      [instance, task] = await Promise.all([
-        instanceService.getByIdOrThrow(instanceId),
-        taskService.getByIdOrThrow(taskId),
-      ]);
-
-      if (this.canExecute(instance, task) === false) {
-        this.logger.warn("Discarding task execution result.");
-        return;
-      }
-
       await executor.end(executionId, result);
 
       const isLastAttempt = job.attemptsMade + 1 === job.opts.attempts;
@@ -108,6 +97,6 @@ export class ExecutionWorker {
       );
     }
 
-    throw new EngineError("Task execution failed");
+    throw new EngineError(`Task execution for task id=${task.id} failed`);
   }
 }
