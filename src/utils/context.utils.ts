@@ -3,10 +3,10 @@ import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { EngineError } from "../errors/EngineError.js";
-import { httpRequestService } from "../services/httpRequest.service.js";
 import { JSONPath } from "jsonpath-plus";
-import type { FeelDataType } from "../types/enums.js";
+import { FeelDataType } from "../types/enums.js";
 import { isValidFeelType, type FeelDataTypeMap } from "./feel.utils.js";
+import { httpService } from "../services/http.service.js";
 
 export const contextUtils = {
   getByJsonPath(data: any, path: string): unknown {
@@ -41,43 +41,41 @@ export const contextUtils = {
       }
 
       if (!(urlId in fetchedResponses)) {
-        const result = evaluate(urlSettings.urlExpression, {
-          context: returnContext,
-        });
+        const url = contextUtils.getFeelEvaluatedValue(
+          urlSettings.urlExpression,
+          {
+            context: returnContext,
+          },
+          FeelDataType.STRING,
+        );
 
-        if (result.warnings.length !== 0 || typeof result.value !== "string") {
-          throw new DataIntegrityError(
-            `Invalid FEEL expression "${urlSettings.urlExpression}"`,
+        const headers: Record<string, string> = {};
+        for (const [key, value] of Object.entries(urlSettings.headers)) {
+          headers[key] = contextUtils.getFeelEvaluatedValue(
+            value,
+            {
+              context: returnContext,
+            },
+            FeelDataType.STRING,
           );
         }
 
-        const headers: Record<string, string> = {};
-
-        for (const [key, value] of Object.entries(urlSettings.headers)) {
-          const result = evaluate(value, {
-            context: returnContext,
-          });
-          if (
-            result.warnings.length !== 0 ||
-            typeof result.value !== "string"
-          ) {
-            throw new DataIntegrityError(`Invalid FEEL expression "${value}"`);
-          }
-
-          headers[key] = result.value;
-        }
-
-        fetchedResponses[urlId] = await httpRequestService.get(
-          result.value,
-          urlSettings.headers,
-        );
+        fetchedResponses[urlId] = await httpService.get(url, {
+          headers: urlSettings.headers,
+        });
       }
 
-      const rawValue = contextUtils.getByJsonPath(
+      const varValue = contextUtils.getByJsonPath(
         fetchedResponses[urlId],
         jsonPath,
       );
-      returnContext[varName] = rawValue;
+      if (!isValidFeelType(varValue, dataType)) {
+        throw new EngineError(
+          `Fetchable ${varName} must be of type ${dataType}`,
+        );
+      }
+
+      returnContext[varName] = varValue;
     }
 
     return { context: returnContext };
