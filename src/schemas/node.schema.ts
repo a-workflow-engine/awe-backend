@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FeelDataType, NodeTypes, TimeUnit } from "../types/enums.js";
+import { HttpMethodSchema } from "../types/http.js";
 
 export const FeelDataTypeSchema = z.enum([
   FeelDataType.NUMBER,
@@ -18,25 +19,25 @@ const HttpHeaderSchema = z.object({
   valueExpression: z.string(),
 });
 
-export const StartNodeConfigurationSchema = z.object({
-  inputDataMap: z.array(
-    z.object({
-      jsonPath: z.string(),
-      dataType: FeelDataTypeSchema,
-      contextVariableName: z.string(),
-      fetchableId: z.string().optional(),
-    }),
-  ),
+export const FetchableSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  method: z.enum(["GET"]),
+  headers: z.array(HttpHeaderSchema).optional(),
+  urlExpression: z.string(),
+});
 
-  fetchables: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string().optional(),
-      method: z.enum(["GET"]),
-      headers: z.array(HttpHeaderSchema).optional(),
-      urlExpression: z.string(),
-    }),
-  ),
+export const StartNodeDataMapSchema = z.object({
+  jsonPath: z.string(),
+  dataType: FeelDataTypeSchema,
+  contextVariableName: z.string(),
+  fetchableId: z.string().optional(),
+});
+
+export const StartNodeConfigurationSchema = z.object({
+  inputDataMap: z.array(StartNodeDataMapSchema),
+
+  fetchables: z.array(FetchableSchema),
 });
 
 export const EndNodeConfigurationSchema = z.object({
@@ -104,15 +105,14 @@ const ServiceResponseSchema = z.object({
   contextVariableName: z.string(),
 });
 
-const BackoffSchema = z
-  .object({
-    type: z.enum(["fixed", "exponential"]),
-    delay: z.number().positive().optional().default(1000),
-    unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
-  })
+const BackoffSchema = z.object({
+  type: z.enum(["fixed", "exponential"]),
+  delay: z.number().positive().optional().default(1000),
+  unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
+});
 
 export const ServiceNodeConfigurationSchema = z.object({
-  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+  method: HttpMethodSchema,
   urlExpression: z.string(),
 
   maxAttempts: z.number().optional().default(1),
@@ -149,18 +149,20 @@ export const ScriptNodeConfigurationSchema = z.object({
   ),
 });
 
+export const RuleSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  conditionExpression: z.string(),
+});
+
+export const DefaultRuleSchema = z.object({
+  id: z.literal("default"),
+  label: z.string().optional(),
+});
+
 export const DecisionNodeConfigurationSchema = z.object({
-  rules: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string().optional(),
-      conditionExpression: z.string(),
-    }),
-  ),
-  defaultRule: z.object({
-    id: z.literal("default"),
-    label: z.string().optional(),
-  }),
+  rules: z.array(RuleSchema),
+  defaultRule: DefaultRuleSchema,
 });
 
 export const NodeSchema = z

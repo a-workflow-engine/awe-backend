@@ -1,7 +1,7 @@
 import type { Transaction } from "kysely";
 import { db } from "../database";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository";
-import type { ContextVariables } from "../types/engine";
+import type { InputVariables } from "../types/engine";
 import { LogEventTypes, TaskStatuses } from "../types/enums";
 import type { LogDetailSchema } from "../types/instanceLog";
 import type { TaskExecutionModel, TaskModel } from "../types/models";
@@ -286,7 +286,7 @@ export const taskExecutionService = {
   create: async (
     instanceId: string,
     taskId: string,
-    inputVariables: ContextVariables,
+    inputVariables: InputVariables,
     transaction?: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
     const executeCallback = async (transaction: Transaction<DB>) => {

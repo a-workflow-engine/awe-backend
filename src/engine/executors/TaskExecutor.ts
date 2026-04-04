@@ -1,29 +1,34 @@
-import { EngineError } from "../../errors/EngineError";
-import { taskExecutionService } from "../../services/taskExecution.service";
-import type { ContextVariables, ExecutorResult } from "../../types/engine";
-import { NodeTypes, TaskStatuses } from "../../types/enums";
-import type {
-  NodeModel,
-  TaskExecutionModel,
-  TaskModel,
-} from "../../types/models";
-import type { BaseExecutor } from "./BaseExecutor";
-import { DecisionNodeExecutor } from "./DecisionNodeExecutor";
-import { EndNodeExecutor } from "./EndNodeExecutor";
-import { ScriptNodeExecutor } from "./ScriptNodeExecutor";
-import { ServiceNodeExecutor } from "./ServiceNodeExecuter";
-import { StartNodeExecutor } from "./StartNodeExecutor";
+import { EngineError } from "../../errors/EngineError.js";
+import { taskExecutionService } from "../../services/taskExecution.service.js";
+import type { NodeType } from "../../types/database.js";
+import type { InputVariables, ExecutorResult } from "../../types/engine.js";
+import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import type { NodeModel, TaskModel } from "../../types/models.js";
+import type { BaseExecutor } from "./BaseExecutor.js";
+import { DecisionNodeExecutor } from "./DecisionNodeExecutor.js";
+import { EndNodeExecutor } from "./EndNodeExecutor.js";
+import { ScriptNodeExecutor } from "./ScriptNodeExecutor.js";
+import { ServiceNodeExecutor } from "./ServiceNodeExecuter.js";
+import { StartNodeExecutor } from "./StartNodeExecutor.js";
 
-const EXECUTORS: Partial<Record<string, BaseExecutor>> = {
-  [NodeTypes.START]: new StartNodeExecutor(),
-  [NodeTypes.END]: new EndNodeExecutor(),
-  [NodeTypes.DECISION]: new DecisionNodeExecutor(),
-  [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
-  [NodeTypes.SERVICE]: new ServiceNodeExecutor(),
+type ExecutorConstructor = new (
+  node: NodeModel,
+  inputVariables: InputVariables,
+) => BaseExecutor<any>;
+
+const ExecutorMap: Record<
+  Exclude<NodeType, typeof NodeTypes.USER>,
+  ExecutorConstructor
+> = {
+  [NodeTypes.START]: StartNodeExecutor,
+  [NodeTypes.SERVICE]: ServiceNodeExecutor,
+  [NodeTypes.SCRIPT]: ScriptNodeExecutor,
+  [NodeTypes.DECISION]: DecisionNodeExecutor,
+  [NodeTypes.END]: EndNodeExecutor,
 };
 
 export default class TaskExecutor {
-  private executor: BaseExecutor;
+  private executorConstructor: ExecutorConstructor;
   private node: NodeModel;
   private task: TaskModel;
 
@@ -31,33 +36,41 @@ export default class TaskExecutor {
     this.task = task;
     this.node = node;
 
-    const executor = EXECUTORS[this.node.type];
-    if (!executor) {
-      throw new EngineError(`Executor for ${node.type} not implemented`);
+    if (node.type == NodeTypes.USER) {
+      throw new EngineError(
+        `User task cannot be executed by engine - Task id=${task.id}`,
+      );
     }
 
-    this.executor = executor;
+    const Executor = ExecutorMap[node.type];
+    if (!Executor) {
+      throw new EngineError(`Executor for ${node.type} not found`);
+    }
+
+    this.executorConstructor = Executor;
   }
 
   async run(
-    context: ContextVariables,
+    context: InputVariables,
   ): Promise<{ executionId: string; result: ExecutorResult }> {
     const taskExecution = await taskExecutionService.create(
       this.task.instance_id,
       this.task.id,
       context,
     );
-    const result = await this.executor
-      .execute(this.node, context)
-      .catch((err: Error) => {
-        return {
-          status: TaskStatuses.FAILED,
-          outputVariables: {},
-          nextNodeId: null,
-          errorMessage: err.message,
-          error: err,
-        };
-      });
+
+    const executor = new this.executorConstructor(this.node, context);
+
+    executor;
+    const result = await executor.run().catch((err: Error) => {
+      return {
+        status: TaskStatuses.FAILED,
+        outputVariables: {},
+        nextNodeId: null,
+        errorMessage: err.message,
+        error: err,
+      };
+    });
 
     return {
       executionId: taskExecution.id,

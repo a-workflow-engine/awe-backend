@@ -6,10 +6,10 @@ import type { Transaction } from "kysely";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { nodeRepository } from "../repositories/node.repository.js";
 import { db } from "../database.js";
-import { LogEventTypes, NodeTypes, TaskStatuses, TimeUnit } from "../types/enums.js";
+import { LogEventTypes, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { queueService } from "./queue.service.js";
 import { userTaskService } from "./userTaskExecution.service.js";
-import type { ContextVariables } from "../types/engine.js";
+import type { InputVariables } from "../types/engine.js";
 import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { contextUtils } from "../utils/context.utils.js";
@@ -150,7 +150,7 @@ export const taskService = {
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {
-    let instanceContext: ContextVariables;
+    let instanceContext: InputVariables;
 
     if (node.type === NodeTypes.START) {
       instanceContext = {

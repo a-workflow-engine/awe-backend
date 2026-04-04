@@ -4,7 +4,7 @@ import { StateTransitionError } from "../errors/StateTransitionError";
 import { instanceService } from "../services/instance.service";
 import { taskService } from "../services/task.service";
 import type { DB, InstanceStatus, NodeType } from "../types/database";
-import type { ContextVariables, ExecutorResult } from "../types/engine";
+import type { ExecutorResult, InputVariables } from "../types/engine";
 import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums";
 import type { InstanceModel, NodeModel, TaskModel } from "../types/models";
 import { converterUtils } from "./converter.utils";
@@ -40,7 +40,7 @@ function getUpdatedInstanceContext(
   node: NodeModel,
   executionOuputVariables: Record<string, unknown>,
   instance: InstanceModel,
-): ContextVariables {
+): InputVariables {
   if (node.type === NodeTypes.START) {
     return converterUtils.objectToContextVariables(executionOuputVariables);
   }
@@ -94,7 +94,7 @@ async function applyInstanceUpdate(
   node: NodeModel,
   result: ExecutorResult,
   instanceStatus: InstanceStatus,
-  instanceContext: ContextVariables,
+  instanceContext: InputVariables,
   transaction: Transaction<DB>,
 ): Promise<InstanceModel> {
   if (node.type === NodeTypes.END && result.status === TaskStatuses.COMPLETED) {

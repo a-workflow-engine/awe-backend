@@ -4,9 +4,13 @@ import { ValidationError } from "../errors/ValidationError.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
-import { TaskStatuses, InstanceStatuses } from "../types/enums.js";
+import {
+  TaskStatuses,
+  InstanceStatuses,
+  FeelDataType,
+} from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
-import type { ContextVariables, ExecutorResult } from "../types/engine.js";
+import type { InputVariables, ExecutorResult } from "../types/engine.js";
 import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import type {
@@ -28,7 +32,7 @@ export const userTaskService = {
   create: async (
     node: UserNodeModel,
     taskExecution: TaskExecutionModel,
-    executionContext: ContextVariables,
+    executionContext: InputVariables,
     transaction: Transaction<DB>,
   ): Promise<UserTaskExecutionModel> => {
     const configObject = converterUtils.jsonValueToObject(node.configuration);
@@ -41,10 +45,10 @@ export const userTaskService = {
       await contextUtils.evaluateContext(executionContext);
 
     const assignee = configuration.assignee
-      ? contextUtils.getEvaluatedValue(
+      ? contextUtils.getFeelEvaluatedValue(
           configuration.assignee,
           evaluatedContext,
-          "string",
+          FeelDataType.STRING,
         )
       : null;
     const title = configuration.title ?? null;
@@ -110,7 +114,7 @@ export const userTaskService = {
 
     const requestData: Record<string, unknown> = {};
     configuration.requestMap.forEach((data) => {
-      requestData[data.label] = contextUtils.getEvaluatedValue(
+      requestData[data.label] = contextUtils.getFeelEvaluatedValue(
         data.valueExpression,
         evaluatedContext,
       );

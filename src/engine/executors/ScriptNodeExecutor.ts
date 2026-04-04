@@ -1,116 +1,66 @@
-import type { NodeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
-import { ScriptNodeConfigurationSchema } from "../../schemas/node.schema.js";
-import { evaluate } from "@bpmn-io/feelin";
-import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { contextUtils } from "../../utils/context.utils.js";
-import { TaskStatuses } from "../../types/enums.js";
-import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
-import { edgeService } from "../../services/edge.services.js";
-import { ExecutionServiceFactory } from "../../services/executionService.factory.js";
-import { getLogger } from "../../logger.js";
+import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import type {
+  ExecutorResult,
+  Context,
+  ScriptExecutionService,
+} from "../../types/engine.js";
+import { JDoodleService } from "../services/jdoodle.service.js";
+import { GeminiService } from "../services/gemini.service.js";
+import { EngineError } from "../../errors/EngineError.js";
+import { isValidFeelType } from "../../utils/feel.utils.js";
 
-export class ScriptNodeExecutor extends BaseExecutor {
-  async execute(
-    node: NodeModel,
-    inputVariables: ContextVariables,
-  ): Promise<ExecutorResult> {
-    const parsed = ScriptNodeConfigurationSchema.safeParse(node.configuration);
-    if (!parsed.success) {
-      throw new DataIntegrityError(
-        `Script node configuration is invalid node id=${node.id}`,
-      );
-    }
+const executionServiceRegistry: Record<string, ScriptExecutionService> = {
+  gemini: new GeminiService(),
+  jdoodle: new JDoodleService(),
+};
 
-    const configuration = parsed.data;
-
-    const evaluatedContext = await contextUtils.evaluateContext(inputVariables);
-
-    const parameters = configuration.parameterMap.map(
-      (parameter) =>
-        evaluate(parameter.valueExpression, evaluatedContext).value,
+export class ScriptNodeExecutor extends BaseExecutor<typeof NodeTypes.SCRIPT> {
+  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+    const parameters = this.configuration.parameterMap.map((dataMap) =>
+      contextUtils.getFeelEvaluatedValue(
+        dataMap.valueExpression,
+        evaluatedContext,
+      ),
     );
 
-    let parsedOutput;
-    let rawOutput: string = "";
+    const executionServiceType = this.configuration.executionService;
 
-    try {
-      const executionServiceType = configuration.executionService ?? "jdoodle";
-      const logger = getLogger();
-
-      logger.info(
-        { nodeId: node.id, executionService: executionServiceType },
-        `Executing script using ${executionServiceType} service`,
+    const service = executionServiceRegistry[executionServiceType];
+    if (service === undefined) {
+      throw new EngineError(
+        `Script service for ${executionServiceType} not found`,
       );
-
-      const executionService =
-        ExecutionServiceFactory.get(executionServiceType);
-
-      const response = await executionService.executeScript(
-        configuration.sourceCode,
-        configuration.entryFunctionName,
-        parameters,
-      );
-
-      parsedOutput = response.parsedOutput;
-      rawOutput = response.rawOutput;
-
-      console.log("RAW:", rawOutput);
-      console.log("PARSED:", parsedOutput);
-    } catch (error: any) {
-      const logger = getLogger();
-      logger.error(
-        {
-          nodeId: node.id,
-          error: error.message,
-          stack: error.stack,
-          executionService: configuration.executionService ?? "jdoodle",
-        },
-        "Script execution failed",
-      );
-      return {
-        status: TaskStatuses.FAILED,
-        outputVariables: {},
-        errorMessage: error.message,
-        nextNodeId: null,
-      };
     }
 
-    if (!parsedOutput) {
-      return {
-        status: TaskStatuses.FAILED,
-        outputVariables: {},
-        errorMessage: "Script execution returned empty output",
-        nextNodeId: null,
-      };
+    const result = await service.executeScript(
+      this.configuration.sourceCode,
+      this.configuration.entryFunctionName,
+      parameters,
+    );
+
+    if (!result.success) {
+      return this.getFailedResult(`Script failed to execute`, result.output);
     }
 
-    if (parsedOutput?.error) {
-      return {
-        status: TaskStatuses.FAILED,
-        outputVariables: {},
-        errorMessage: parsedOutput.error,
-        nextNodeId: null,
-      };
-    }
+    this.configuration.responseMap.forEach((dataMap) => {
+      const value = contextUtils.getByJsonPath(result.output, dataMap.jsonPath);
+      if (value === undefined) {
+        return this.getFailedResult(
+          `"${dataMap.jsonPath}" is missing from result`,
+        );
+      }
 
-    let outputVariables: Record<string, unknown> = {};
+      if (!isValidFeelType(value, dataMap.type)) {
+        return this.getFailedResult(
+          `"${dataMap.jsonPath}" not of type ${dataMap.type}`,
+        );
+      }
 
-    configuration.responseMap.forEach(({ jsonPath, contextVariableName }) => {
-      outputVariables[contextVariableName] =
-        typeof parsedOutput === "object"
-          ? contextUtils.getByJsonPath(parsedOutput, jsonPath)
-          : parsedOutput;
+      this.outputVariables[dataMap.contextVariableName] = value;
     });
 
-    const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
-      node.id,
-    );
-
-    return {
-      status: TaskStatuses.COMPLETED,
-      outputVariables,
-      nextNodeId: nextNode ?? null,
-    };
+    return await this.getCompletedResult();
   }
 }

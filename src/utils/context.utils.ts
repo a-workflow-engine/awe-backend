@@ -1,32 +1,12 @@
-import type { ContextVariables } from "../types/engine.js";
+import type { InputVariables, Context } from "../types/engine.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { EngineError } from "../errors/EngineError.js";
 import { httpRequestService } from "../services/httpRequest.service.js";
 import { JSONPath } from "jsonpath-plus";
-
-type DataTypeMap = {
-  string: string;
-  number: number;
-  boolean: boolean;
-  object: Record<string, unknown>;
-  array: unknown[];
-  unknowm: unknown;
-};
-
-function isValidType(value: unknown, type: keyof DataTypeMap): boolean {
-  switch (type) {
-    case "array":
-      return Array.isArray(value);
-    case "object":
-      return (
-        typeof value === "object" && value !== null && !Array.isArray(value)
-      );
-    default:
-      return typeof value === type;
-  }
-}
+import type { FeelDataType } from "../types/enums.js";
+import { isValidFeelType, type FeelDataTypeMap } from "./feel.utils.js";
 
 export const contextUtils = {
   getByJsonPath(data: any, path: string): unknown {
@@ -43,9 +23,7 @@ export const contextUtils = {
     }
   },
 
-  async evaluateContext(
-    contextVariables: ContextVariables,
-  ): Promise<{ context: Record<string, unknown> }> {
+  async evaluateContext(contextVariables: InputVariables): Promise<Context> {
     const { constants, fetchables, urls } = contextVariables;
 
     const returnContext: Record<string, unknown> = { ...constants };
@@ -105,32 +83,32 @@ export const contextUtils = {
     return { context: returnContext };
   },
 
-  getEvaluatedValue<T extends keyof DataTypeMap>(
+  getFeelEvaluatedValue<T extends FeelDataType>(
     expression: string,
-    context: Record<string, unknown>,
+    context: Context,
     dataType?: T,
-  ): DataTypeMap[T] {
+  ): FeelDataTypeMap[T] {
     const result = evaluate(expression, context);
 
     if (!result || result.warnings.length > 0) {
       throw new DataIntegrityError(`Invalid FEEL expression ${expression}`);
     }
 
-    if (dataType && !isValidType(result.value, dataType)) {
+    if (dataType && !isValidFeelType(result.value, dataType)) {
       throw new DataIntegrityError(
         `Invalid FEEL expression ${expression}, expected ${dataType}, got ${typeof result.value}`,
       );
     }
 
-    return result.value as DataTypeMap[T];
+    return result.value as FeelDataTypeMap[T];
   },
 
   getTaskContext(
-    instanceContext: ContextVariables,
+    instanceContext: InputVariables,
     inputSchema: NodeInputSchema,
-  ): ContextVariables {
+  ): InputVariables {
     const { constants, fetchables, urls } = instanceContext;
-    const taskContext: ContextVariables = {
+    const taskContext: InputVariables = {
       constants: {},
       fetchables: {},
       urls: {},

@@ -11,7 +11,6 @@ import {
   type NewNode,
 } from "../repositories/node.repository.js";
 import { NodeTypes } from "../types/enums.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { NotFoundError } from "../errors/NotFoundError.js";

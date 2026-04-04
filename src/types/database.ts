@@ -425,6 +425,7 @@ export interface Edge {
   modified_by: string;
   modified_on: Generated<Timestamp>;
   name: string | null;
+  rule_id: string | null;
   source_node_id: string;
 }
 

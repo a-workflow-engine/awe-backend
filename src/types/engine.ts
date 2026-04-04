@@ -1,3 +1,4 @@
+import z, { success } from "zod";
 import type { TaskStatus } from "./database";
 import type { FeelDataType } from "./enums";
 
@@ -12,7 +13,7 @@ export interface FetchableSettings {
   dataType: FeelDataType;
 }
 
-export interface ContextVariables {
+export interface InputVariables {
   constants: Record<string, unknown>; // variableName: value
   fetchables: Record<string, FetchableSettings>; // variableName: FetchableSettings
   urls: Record<string, UrlSettings>; // urlId: settings
@@ -34,7 +35,21 @@ export interface QueueJobData {
 
 export type NodeRunResult = { nextNodeIds: string[] };
 
-export interface ScriptExecutionResponse {
-  output?: Record<string, unknown>;
-  error?: string;
+export type Context = {
+  context: Record<string, unknown>;
+};
+
+export const ScriptExecutionResultSchema = z.object({
+  success: z.boolean(),
+  output: z.record(z.string(), z.unknown()),
+});
+
+export type ScriptExecutionResult = z.infer<typeof ScriptExecutionResultSchema>;
+
+export interface ScriptExecutionService {
+  executeScript(
+    sourceCode: string,
+    entryFunctionName: string,
+    parameters: unknown[],
+  ): Promise<ScriptExecutionResult>;
 }

@@ -16,7 +16,7 @@ const request = async (
     response = await fetch(url, {
       method,
       headers: {
-        ...(options?.body ? { "Content-Type": "application/json" } : {}),
+        ...(options?.body && { "Content-Type": "application/json" }),
         ...(options?.headers ?? {}),
       },
       ...(options?.body ? { body: JSON.stringify(options.body) } : {}),
