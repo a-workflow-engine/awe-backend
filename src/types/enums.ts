@@ -1,6 +1,7 @@
 import type {
   ActorType,
   EnvironmentType,
+  InstanceControlSignal,
   InstanceEntityType,
   InstanceEventType,
   InstanceStatus,
@@ -62,12 +63,20 @@ export const InstanceEntityTypes = {
 export const LogEventTypes = {
   COMPLETED: "completed",
   FAILED: "failed",
+  PAUSE_REQUESTED: "pause_requested",
+  RESUME_REQUESTED: "resume_requested",
   PAUSED: "paused",
   TERMINATED: "terminated",
   RESUMED: "resumed",
   STARTED: "started",
   RETRIED: "retried",
+  TERMINATE_REQUESTED: "terminate_requested",
 } as const satisfies Record<string, InstanceEventType>;
+
+export const InstanceControlSignals = {
+  PAUSE: "pause",
+  TERMINATE: "terminate",
+} as const satisfies Record<string, InstanceControlSignal>;
 
 export enum FeelDataType {
   NUMBER = "number",

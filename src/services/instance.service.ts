@@ -11,6 +11,7 @@ import {
   LogEventTypes,
   InstanceStatuses,
   TaskStatuses,
+  InstanceControlSignals,
 } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -293,72 +294,72 @@ export const instanceService = {
 
   pause: async (
     instanceId: string,
-    actorId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
   ): Promise<InstanceModel> => {
-    const instance = await instanceRepository.findById(instanceId);
+    const logger = getLogger();
+    logger.info(details, `Instance id=${instanceId} paused`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          {
+            status: InstanceStatuses.PAUSED,
+            control_signal: null,
+          },
+          transaction,
+        ),
+
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.FAILED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return instance;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
+
+  signalPause: async (
+    instanceId: string,
+    actor: ActorModel,
+  ): Promise<InstanceModel> => {
+    let instance = await instanceRepository.findById(instanceId);
     if (!instance) {
       throw new NotFoundError(`Instance id=${instanceId} not found`);
     }
 
-    // Cannot pause completed instances
-    if (instance.status === InstanceStatuses.COMPLETED) {
-      throw new StateTransitionError(`Cannot pause a completed instance`);
-    }
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
 
-    // Cannot pause failed instances
-    if (instance.status === InstanceStatuses.FAILED) {
-      throw new StateTransitionError(`Cannot pause a failed instance`);
-    }
-
-    // Cannot pause terminated instances
-    if (instance.status === InstanceStatuses.TERMINATED) {
-      throw new StateTransitionError(`Cannot pause a terminated instance`);
-    }
-
-    // Already paused
     if (instance.status === InstanceStatuses.PAUSED) {
       throw new StateTransitionError(`Instance is already paused`);
     }
 
     return await db.transaction().execute(async (transaction) => {
-      const currentTask =
-        await taskRepository.findLatestByInstanceId(instanceId);
-      if (currentTask) {
-        const finalStatuses: string[] = [
-          TaskStatuses.COMPLETED,
-          TaskStatuses.FAILED,
-          TaskStatuses.PAUSED,
-          TaskStatuses.TERMINATED,
-        ];
-        if (!finalStatuses.includes(currentTask.status)) {
-          await taskRepository.updateById(
-            currentTask.id,
-            { status: TaskStatuses.PAUSED },
-            transaction,
-          );
-        }
+      const [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          { control_signal: InstanceControlSignals.PAUSE },
+          transaction,
+        ),
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.PAUSE_REQUESTED,
+          undefined,
+          actor.id,
+          transaction,
+        ),
+      ]);
 
-        // Remove job from queue (idempotent - safe if already removed)
-        await queueService.removeJob(currentTask.id);
-      }
-
-      const updatedInstance = await instanceRepository.updateById(
-        instanceId,
-        {
-          status: InstanceStatuses.PAUSED,
-        },
-        transaction,
-      );
-
-      await eventLogService.createInstanceLog(
-        instanceId,
-        LogEventTypes.PAUSED,
-        { message: "Instance paused by user" },
-        actorId,
-        transaction,
-      );
-
-      return updatedInstance;
+      return instance;
     });
   },
 
@@ -371,7 +372,8 @@ export const instanceService = {
       throw new NotFoundError(`Instance id=${instanceId} not found`);
     }
 
-    // Can only resume paused instances
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
+
     if (instance.status !== InstanceStatuses.PAUSED) {
       throw new StateTransitionError(
         `Cannot resume instance with status: ${instance.status}. Only paused instances can be resumed.`,
@@ -424,7 +426,7 @@ export const instanceService = {
     });
   },
 
-  terminate: async (
+  signalTerminate: async (
     instanceId: string,
     actorId: string,
   ): Promise<InstanceModel> => {

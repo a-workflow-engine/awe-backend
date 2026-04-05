@@ -97,7 +97,7 @@ export const instanceController = {
 
   pause: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.pause(instanceId, req.actor.id);
+    const instance = await instanceService.signalPause(instanceId, req.actor);
     return res.json({
       id: instance.id,
       status: instance.status,
@@ -119,7 +119,10 @@ export const instanceController = {
 
   terminate: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.terminate(instanceId, req.actor.id);
+    const instance = await instanceService.signalTerminate(
+      instanceId,
+      req.actor.id,
+    );
     return res.json({
       id: instance.id,
       status: instance.status,

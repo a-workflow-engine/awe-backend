@@ -232,4 +232,41 @@ export const taskService = {
       ? await executeCallback(transaction)
       : await db.transaction().execute(executeCallback);
   },
+
+  pause: async (
+    instanceId: string,
+    taskId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    const logger = getLogger();
+    logger.info({ details }, `Task id=${taskId} paused`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [task] = await Promise.all([
+        taskRepository.updateById(
+          taskId,
+          {
+            status: TaskStatuses.PAUSED,
+          },
+          transaction,
+        ),
+
+        eventLogService.createTaskLog(
+          instanceId,
+          taskId,
+          LogEventTypes.PAUSED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return task;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
 };

@@ -3,9 +3,14 @@ import { db } from "../database.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { instanceService } from "../services/instance.service.js";
 import { taskService } from "../services/task.service.js";
-import type { DB, InstanceStatus, NodeType } from "../types/database.js";
+import type { DB, InstanceStatus, NodeType, Task } from "../types/database.js";
 import type { ExecutorResult, InputVariables } from "../types/engine.js";
-import { InstanceStatuses, NodeTypes, TaskStatuses } from "../types/enums.js";
+import {
+  InstanceControlSignals,
+  InstanceStatuses,
+  NodeTypes,
+  TaskStatuses,
+} from "../types/enums.js";
 import type { InstanceModel, NodeModel, TaskModel } from "../types/models.js";
 import { converterUtils } from "./converter.utils.js";
 import { EngineError } from "../errors/EngineError.js";
@@ -135,16 +140,20 @@ async function applyInstanceUpdate(
 }
 
 export const engineUtils = {
-  validateInstanceCanExecuteOrThrow: (instance: InstanceModel) => {
+  validateInstanceHasNotEndedOrThrow: (status: InstanceStatus) => {
     if (
-      instance.status === InstanceStatuses.FAILED ||
-      instance.status === InstanceStatuses.TERMINATED ||
-      instance.status === InstanceStatuses.COMPLETED
+      status === InstanceStatuses.FAILED ||
+      status === InstanceStatuses.TERMINATED ||
+      status === InstanceStatuses.COMPLETED
     ) {
       throw new StateTransitionError(
-        `Instance has ended with status=${instance.status}.`,
+        `Instance has ended with status=${status}.`,
       );
     }
+  },
+
+  validateInstanceCanExecuteOrThrow: (instance: InstanceModel) => {
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
 
     if (instance.auto_advance && instance.status === InstanceStatuses.PAUSED) {
       throw new StateTransitionError(
@@ -169,6 +178,36 @@ export const engineUtils = {
         `Task is ${task.status}. Cannot be executed.`,
       );
     }
+  },
+
+  handleInstanceControlSignal: async (
+    instance: InstanceModel,
+    task: TaskModel,
+    node: NodeModel,
+  ) => {
+    if (instance.control_signal === InstanceControlSignals.PAUSE) {
+      return await db.transaction().execute(async (transaction) => {
+        [instance, task] = await Promise.all([
+          instanceService.pause(
+            instance.id,
+            {
+              message: `Paused due to signal. Paused at node=${node.client_id}`,
+            },
+            transaction,
+          ),
+          taskService.pause(
+            instance.id,
+            task.id,
+            { message: "Instance was paused." },
+            transaction,
+          ),
+        ]);
+
+        return { instance, task };
+      });
+    }
+
+    return { instance, task };
   },
 
   onExecutionFailure: async (err: unknown, task: TaskModel) => {
@@ -206,8 +245,6 @@ export const engineUtils = {
     task: TaskModel,
     result: ExecutorResult,
   ) => {
-    let updatedInstance;
-
     try {
       const instanceStatus = getUpdatedInstanceStatus(
         instance.auto_advance,
@@ -215,7 +252,7 @@ export const engineUtils = {
         node.type,
       );
 
-      updatedInstance = await db.transaction().execute(async (transaction) => {
+      instance = await db.transaction().execute(async (transaction) => {
         const instanceContext = getUpdatedInstanceContext(
           node,
           result.outputVariables,
@@ -245,15 +282,24 @@ export const engineUtils = {
     }
 
     if (
-      updatedInstance.auto_advance === false ||
-      updatedInstance.status !== InstanceStatuses.IN_PROGRESS
+      instance.auto_advance === false ||
+      instance.status !== InstanceStatuses.IN_PROGRESS
     ) {
       return;
     }
 
+    const updatedModels = await engineUtils.handleInstanceControlSignal(
+      instance,
+      task,
+      node,
+    );
+
+    instance = updatedModels.instance;
+    task = updatedModels.task;
+
     try {
-      engineUtils.validateInstanceCanExecuteOrThrow(updatedInstance);
-      await handleNextNode(updatedInstance, node.type, result.nextNodeId);
+      engineUtils.validateInstanceCanExecuteOrThrow(instance);
+      await handleNextNode(instance, node.type, result.nextNodeId);
     } catch (err) {
       getLogger().info({ error: err }, "Cannot go to next node");
       return;

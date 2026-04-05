@@ -31,9 +31,11 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type InstanceControlSignal = "pause" | "terminate";
+
 export type InstanceEntityType = "instance" | "task" | "task_execution" | "user_task_execution";
 
-export type InstanceEventType = "completed" | "failed" | "paused" | "resumed" | "retried" | "started" | "terminated";
+export type InstanceEventType = "completed" | "failed" | "pause_requested" | "paused" | "resume_requested" | "resumed" | "retried" | "started" | "terminate_requested" | "terminated";
 
 export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
@@ -497,6 +499,7 @@ export interface ExtensionsPgStatStatementsInfo {
 
 export interface Instance {
   auto_advance: Generated<boolean>;
+  control_signal: InstanceControlSignal | null;
   created_by: string;
   created_on: Generated<Timestamp>;
   current_node_id: string | null;
@@ -717,11 +720,6 @@ export interface TaskExecution {
   task_id: string;
 }
 
-export interface TempoEmps {
-  id: number;
-  name: string;
-}
-
 export interface UserTaskExecution {
   assignee: string | null;
   created_on: Generated<Timestamp>;
@@ -832,7 +830,6 @@ export interface DB {
   system: System;
   task: Task;
   task_execution: TaskExecution;
-  tempo_emps: TempoEmps;
   user_task_execution: UserTaskExecution;
   "vault.decrypted_secrets": VaultDecryptedSecrets;
   "vault.secrets": VaultSecrets;

@@ -10,7 +10,11 @@ import { nodeService } from "../../services/node.services.js";
 import TaskExecutor from "../executors/TaskExecutor.js";
 import type { Logger } from "pino";
 import { TaskStatuses } from "../../types/enums.js";
-import type { InstanceModel, TaskModel } from "../../types/models.js";
+import type {
+  InstanceModel,
+  NodeModel,
+  TaskModel,
+} from "../../types/models.js";
 import { EngineError } from "../../errors/EngineError.js";
 
 export class ExecutionWorker {
@@ -61,11 +65,21 @@ export class ExecutionWorker {
 
   private async processJob(job: Job<QueueJobData>): Promise<void> {
     const { instanceId, taskId, nodeId } = job.data;
+
     let [instance, task, node] = await Promise.all([
       instanceService.getByIdOrThrow(instanceId),
       taskService.getByIdOrThrow(taskId),
       nodeService.getByIdOrThrow(nodeId),
     ]);
+
+    const updatedModels = await engineUtils.handleInstanceControlSignal(
+      instance,
+      task,
+      node,
+    );
+
+    instance = updatedModels.instance;
+    task = updatedModels.task;
 
     if (this.canExecute(instance, task) === false) {
       return;
