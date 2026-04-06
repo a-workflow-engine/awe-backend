@@ -20,13 +20,8 @@ import { getLogger } from "../logger.js";
 
 async function handleNextNode(
   instance: InstanceModel,
-  currentNodeType: NodeType,
   nextNodeId: string | null,
 ) {
-  if (currentNodeType === NodeTypes.END) {
-    return;
-  }
-
   if (nextNodeId === null) {
     throw new EngineError(`Next node is null`);
   }
@@ -304,7 +299,8 @@ export const engineUtils = {
 
     if (
       instance.auto_advance === false ||
-      instance.status !== InstanceStatuses.IN_PROGRESS
+      instance.status !== InstanceStatuses.IN_PROGRESS ||
+      node.type === NodeTypes.END
     ) {
       return;
     }
@@ -320,7 +316,7 @@ export const engineUtils = {
 
     try {
       engineUtils.validateInstanceCanExecuteOrThrow(instance);
-      await handleNextNode(instance, node.type, result.nextNodeId);
+      await handleNextNode(instance, result.nextNodeId);
     } catch (err) {
       getLogger().info({ error: err }, "Cannot go to next node");
       return;

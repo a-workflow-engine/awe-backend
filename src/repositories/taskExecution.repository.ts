@@ -41,6 +41,17 @@ export type ExecutionGraphData = {
 };
 
 export const taskExecutionRepository = {
+  findByTaskId: async (
+    taskId: string,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskExecutionModel[]> => {
+    return await (transaction ?? db)
+      .selectFrom("task_execution")
+      .selectAll()
+      .where("task_id", "=", taskId)
+      .execute();
+  },
+
   insert: async (
     data: NewTaskExecution,
     transaction?: Transaction<DB>,

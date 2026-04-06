@@ -21,6 +21,79 @@ import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import { convertToMilliseconds } from "../utils/converter.utils.js";
 
+async function createExecution(
+  instance: InstanceModel,
+  task: TaskModel,
+  node: NodeModel,
+  previousAttemptCount: number = 0,
+  transaction: Transaction<DB>,
+) {
+  const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
+  const attempts = {
+    type: "fixed",
+    delay: 1000,
+    max: 1,
+  };
+
+  if (
+    nodeSchema.type === NodeTypes.SERVICE ||
+    nodeSchema.type === NodeTypes.SCRIPT
+  ) {
+    attempts.delay = convertToMilliseconds(
+      nodeSchema.configuration.backoff.delay,
+      nodeSchema.configuration.backoff.unit,
+    );
+    attempts.type = nodeSchema.configuration.backoff.type;
+    attempts.max = nodeSchema.configuration.maxAttempts - previousAttemptCount;
+  }
+
+  if (node.type !== NodeTypes.USER) {
+    await queueService
+      .enqueue(
+        {
+          instanceId: instance.id,
+          taskId: task.id,
+          nodeId: node.id,
+        },
+        attempts.max,
+        attempts.type,
+        attempts.delay,
+      )
+      .then(() => task)
+      .catch(async (err: Error) => {
+        await engineUtils.onExecutionFailure(err, task);
+        throw new EngineError("Unable to create task.");
+      });
+
+    return task;
+  }
+
+  try {
+    const executionContext = taskService.getTaskContext(instance, node);
+
+    const taskExecution = await taskExecutionService.create(
+      instance.id,
+      task.id,
+      executionContext,
+      transaction,
+    );
+
+    await userTaskService
+      .create(node, taskExecution, executionContext, transaction)
+      .then(() => task)
+      .catch(async (err: Error) => {
+        await engineUtils.onExecutionFailure(err, task);
+        throw new EngineError("Unable to create task.");
+      });
+  } catch (err) {
+    await engineUtils.onExecutionFailure(err, task);
+    throw new EngineError("Unable to create task.");
+  }
+  getLogger().info("Created user task");
+
+  return task;
+}
+
 export const taskService = {
   getByIdOrThrow: async (taskId: string): Promise<TaskModel> => {
     const task = await taskRepository.findById(taskId);
@@ -78,75 +151,53 @@ export const taskService = {
         transaction,
       );
 
-      const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
-      const attempts = {
-        type: "fixed",
-        delay: 1000,
-        max: 1,
-      };
-
-      if (
-        nodeSchema.type === NodeTypes.SERVICE ||
-        nodeSchema.type === NodeTypes.SCRIPT
-      ) {
-        attempts.delay = convertToMilliseconds(
-          nodeSchema.configuration.backoff.delay,
-          nodeSchema.configuration.backoff.unit,
-        );
-        attempts.type = nodeSchema.configuration.backoff.type;
-        attempts.max = nodeSchema.configuration.maxAttempts;
-      }
-
-      if (node.type !== NodeTypes.USER) {
-        await queueService
-          .enqueue(
-            {
-              instanceId: instance.id,
-              taskId: task.id,
-              nodeId: node.id,
-            },
-            attempts.max,
-            attempts.type,
-            attempts.delay,
-          )
-          .then(() => task)
-          .catch(async (err: Error) => {
-            await engineUtils.onExecutionFailure(err, task);
-            throw new EngineError("Unable to create task.");
-          });
-
-        return task;
-      }
-
-      try {
-        const executionContext = taskService.getTaskContext(instance, node);
-
-        const taskExecution = await taskExecutionService.create(
-          instance.id,
-          task.id,
-          executionContext,
-          transaction,
-        );
-
-        await userTaskService
-          .create(node, taskExecution, executionContext, transaction)
-          .then(() => task)
-          .catch(async (err: Error) => {
-            await engineUtils.onExecutionFailure(err, task);
-            throw new EngineError("Unable to create task.");
-          });
-      } catch (err) {
-        await engineUtils.onExecutionFailure(err, task);
-        throw new EngineError("Unable to create task.");
-      }
-      getLogger().info("Created user task");
-
-      return task;
+      return await createExecution(instance, task, node, 0, transaction);
     };
 
     return transaction
       ? await executeCallback(transaction)
       : await db.transaction().execute(executeCallback);
+  },
+
+  resume: async (
+    node: NodeModel,
+    instance: InstanceModel,
+    transaction: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    let task = await taskRepository.findByStatusAndInstanceId(
+      instance.id,
+      TaskStatuses.PAUSED,
+    );
+    if (!task) {
+      return await taskService.create(node, instance, transaction);
+    }
+
+    const taskExecutions = await taskExecutionService.getByTaskId(task.id);
+
+    task = await taskRepository.updateById(
+      task.id,
+      {
+        status: TaskStatuses.IN_PROGRESS,
+      },
+      transaction,
+    );
+
+    await eventLogService.createTaskLog(
+      instance.id,
+      task.id,
+      LogEventTypes.RESUMED,
+      undefined,
+      undefined,
+      transaction,
+    );
+
+    return await createExecution(
+      instance,
+      task,
+      node,
+      taskExecutions.length,
+      transaction,
+    );
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {

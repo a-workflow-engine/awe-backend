@@ -187,6 +187,10 @@ const computeNodeOrder = (
 };
 
 export const taskExecutionService = {
+  getByTaskId: async (taskId: string) => {
+    return await taskExecutionRepository.findByTaskId(taskId);
+  },
+
   getExecutionLogs: async (instanceId: string) => {
     const executionGraphData =
       await taskExecutionRepository.findExecutionGraphByInstanceId(instanceId);

@@ -77,7 +77,7 @@ export const instanceController = {
     });
   },
 
-  advance: async (req: Request, res: Response) => {
+  resume: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instance = await instanceService.resume(instanceId, req.actor);
     return res.json({ instance });

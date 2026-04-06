@@ -1,5 +1,5 @@
 import { db } from "../database.js";
-import type { DB, Task } from "../types/database.js";
+import type { DB, Task, TaskStatus } from "../types/database.js";
 import type { Insertable, Updateable, Transaction } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
@@ -26,6 +26,19 @@ export const taskRepository = {
     } catch (err) {
       throw new RepositoryError(`Find task by id=${id} failed`, err);
     }
+  },
+
+  findByStatusAndInstanceId: async (
+    instanceId: string,
+    status: TaskStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel | undefined> => {
+    return await (transaction ?? db)
+      .selectFrom("task")
+      .selectAll()
+      .where("instance_id", "=", instanceId)
+      .where("status", "=", status)
+      .executeTakeFirst();
   },
 
   findInProgressByInstanceIdWithRelations: async (

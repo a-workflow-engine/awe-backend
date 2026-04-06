@@ -210,7 +210,7 @@ export const instanceService = {
           transaction,
         ),
       ]);
-      await taskService.create(nextNode, updatedInstance, transaction);
+      await taskService.resume(nextNode, updatedInstance, transaction);
       return updatedInstance;
     });
   },

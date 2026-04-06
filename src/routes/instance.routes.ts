@@ -13,9 +13,9 @@ instanceRouter.get(
   instanceController.getExecutionLogs,
 );
 instanceRouter.post(
-  "/:instanceId/advance",
+  "/:instanceId/resume",
   authenticateRequest,
-  instanceController.advance,
+  instanceController.resume,
 );
 instanceRouter.post(
   "/:instanceId/pause",
