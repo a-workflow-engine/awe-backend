@@ -1,25 +1,34 @@
-import { EngineError } from "../../errors/EngineError";
-import { taskExecutionService } from "../../services/taskExecution.service";
-import type { ContextVariables, ExecutorResult } from "../../types/engine";
-import { NodeTypes, TaskStatuses } from "../../types/enums";
-import type { NodeModel, TaskModel } from "../../types/models";
-import type { BaseExecutor } from "./BaseExecutor";
-import { DecisionNodeExecutor } from "./DecisionNodeExecutor";
-import { EndNodeExecutor } from "./EndNodeExecutor";
-import { ScriptNodeExecutor } from "./ScriptNodeExecutor";
-import { ServiceNodeExecutor } from "./ServiceNodeExecuter";
-import { StartNodeExecutor } from "./StartNodeExecutor";
+import { EngineError } from "../../errors/EngineError.js";
+import { taskExecutionService } from "../../services/taskExecution.service.js";
+import type { NodeType } from "../../types/database.js";
+import type { InputVariables, ExecutorResult } from "../../types/engine.js";
+import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import type { NodeModel, TaskModel } from "../../types/models.js";
+import type { BaseExecutor } from "./BaseExecutor.js";
+import { DecisionNodeExecutor } from "./DecisionNodeExecutor.js";
+import { EndNodeExecutor } from "./EndNodeExecutor.js";
+import { ScriptNodeExecutor } from "./ScriptNodeExecutor.js";
+import { ServiceNodeExecutor } from "./ServiceNodeExecuter.js";
+import { StartNodeExecutor } from "./StartNodeExecutor.js";
 
-const EXECUTORS: Partial<Record<string, BaseExecutor>> = {
-  [NodeTypes.START]: new StartNodeExecutor(),
-  [NodeTypes.END]: new EndNodeExecutor(),
-  [NodeTypes.DECISION]: new DecisionNodeExecutor(),
-  [NodeTypes.SCRIPT]: new ScriptNodeExecutor(),
-  [NodeTypes.SERVICE]: new ServiceNodeExecutor(),
+type ExecutorConstructor = new (
+  node: NodeModel,
+  inputVariables: InputVariables,
+) => BaseExecutor<any>;
+
+const ExecutorMap: Record<
+  Exclude<NodeType, typeof NodeTypes.USER>,
+  ExecutorConstructor
+> = {
+  [NodeTypes.START]: StartNodeExecutor,
+  [NodeTypes.SERVICE]: ServiceNodeExecutor,
+  [NodeTypes.SCRIPT]: ScriptNodeExecutor,
+  [NodeTypes.DECISION]: DecisionNodeExecutor,
+  [NodeTypes.END]: EndNodeExecutor,
 };
 
 export default class TaskExecutor {
-  private executor: BaseExecutor;
+  private executorConstructor: ExecutorConstructor;
   private node: NodeModel;
   private task: TaskModel;
 
@@ -27,52 +36,61 @@ export default class TaskExecutor {
     this.task = task;
     this.node = node;
 
-    const executor = EXECUTORS[this.node.type];
-    if (!executor) {
-      throw new EngineError(`Executor for ${node.type} not implemented`);
+    if (node.type == NodeTypes.USER) {
+      throw new EngineError(
+        `User task cannot be executed by engine - Task id=${task.id}`,
+      );
     }
 
-    this.executor = executor;
+    const Executor = ExecutorMap[node.type];
+    if (!Executor) {
+      throw new EngineError(`Executor for ${node.type} not found`);
+    }
+
+    this.executorConstructor = Executor;
   }
 
-  async run(context: ContextVariables): Promise<ExecutorResult> {
-    const taskExecution = await taskExecutionService.create(this.task, context);
+  async run(
+    context: InputVariables,
+  ): Promise<{ executionId: string; result: ExecutorResult }> {
+    const taskExecution = await taskExecutionService.create(
+      this.task.instance_id,
+      this.task.id,
+      context,
+    );
 
-    let result;
+    const executor = new this.executorConstructor(this.node, context);
 
-    try {
-      result = await this.executor.execute(this.node, context);
-    } catch (err) {
-      let message = "Unkown error";
-      if (err instanceof Error) {
-        message = err.message;
-      }
-      await taskExecutionService.fail(this.task.instance_id, taskExecution.id, {
-        message,
-        error: err,
-      });
-
+    executor;
+    const result = await executor.run().catch((err: Error) => {
       return {
         status: TaskStatuses.FAILED,
         outputVariables: {},
         nextNodeId: null,
-        errorMessage: message,
+        errorMessage: err.message,
+        error: err,
       };
-    }
+    });
 
+    return {
+      executionId: taskExecution.id,
+      result,
+    };
+  }
+
+  async end(executionId: string, result: ExecutorResult) {
     if (result.status === TaskStatuses.COMPLETED) {
       await taskExecutionService.complete(
         this.task.instance_id,
-        taskExecution.id,
+        executionId,
         result.outputVariables,
       );
-
-      return result;
+      return;
     }
 
-    await taskExecutionService.fail(this.task.instance_id, taskExecution.id, {
+    await taskExecutionService.fail(this.task.instance_id, executionId, {
       message: result.errorMessage ?? "Unkown error",
+      error: result.error,
     });
-    return result;
   }
 }

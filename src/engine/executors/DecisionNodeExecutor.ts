@@ -1,92 +1,44 @@
-import type { NodeModel, EdgeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
-import { DecisionNodeConfigurationSchema } from "../../schemas/node.schema.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-import { StateTransitionError } from "../../errors/StateTransitionError.js";
-import { TaskStatuses } from "../../types/enums.js";
-import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
-import { evaluate } from "@bpmn-io/feelin";
+import { FeelDataType, NodeTypes } from "../../types/enums.js";
+import type { ExecutorResult, Context } from "../../types/engine.js";
 import { edgeService } from "../../services/edge.services.js";
 import { contextUtils } from "../../utils/context.utils.js";
+import type {
+  DecisionNodeDefaultRule,
+  DecisionNodeRule,
+} from "../../types/workflow.js";
 
-const normalizeExpression = (expr: string): string => {
-  return expr.replace(/\s+/g, " ").trim();
-};
+export class DecisionNodeExecutor extends BaseExecutor<
+  typeof NodeTypes.DECISION
+> {
+  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+    let matchedRule: DecisionNodeRule | DecisionNodeDefaultRule | undefined;
 
-export class DecisionNodeExecutor extends BaseExecutor {
-  async execute(
-    node: NodeModel,
-    inputVariables: ContextVariables,
-  ): Promise<ExecutorResult> {
-    const parsed = DecisionNodeConfigurationSchema.safeParse(
-      node.configuration,
+    matchedRule = this.configuration.rules.find((rule) =>
+      contextUtils.getFeelEvaluatedValue(
+        rule.conditionExpression,
+        evaluatedContext,
+        FeelDataType.BOOLEAN,
+      ),
     );
-    if (!parsed.success) {
-      throw new DataIntegrityError(
-        `Decision node configuration is invalid node id=${node.id}`,
-      );
+
+    if (!matchedRule) {
+      matchedRule = this.configuration.defaultRule;
     }
 
-    const configuration = parsed.data;
-
-    const edges = await edgeService.getBySourceNodeId(node.id);
-
+    const edges = await edgeService.getBySourceNodeId(this.node.id);
     if (edges.length === 0) {
-      throw new StateTransitionError(
-        `Decision node id=${node.id} has no outgoing edges`,
+      throw new DataIntegrityError(
+        `Decision node id=${this.node.id} has no outgoing edges`,
       );
     }
 
-    const feelContext = await contextUtils.evaluateContext(inputVariables);
-
-    let matchedEdge: EdgeModel | null = null;
-
-    for (const rule of configuration.rules) {
-      const normalizedRuleExpr = normalizeExpression(rule.conditionExpression);
-
-      const edge = edges.find(
-        (e) =>
-          e.condition_expression &&
-          normalizeExpression(e.condition_expression) === normalizedRuleExpr,
-      );
-
-      if (!edge) {
-        throw new DataIntegrityError(
-          `No edge found for rule id=${rule.id} with condition="${rule.conditionExpression}" on decision node id=${node.id}`,
-        );
-      }
-
-      const evaluationResult = evaluate(rule.conditionExpression, feelContext);
-
-      if (evaluationResult.warnings && evaluationResult.warnings.length > 0) {
-        throw new StateTransitionError(
-          `FEEL expression evaluation failed for rule id=${rule.id}: ${evaluationResult.warnings.join(", ")}`,
-        );
-      }
-
-      if (
-        evaluationResult.value === null ||
-        evaluationResult.value === undefined
-      ) {
-        continue;
-      }
-
-      if (evaluationResult.value === true) {
-        matchedEdge = edge;
-        break;
-      }
-    }
-
+    const matchedEdge = edges.find((edge) => edge.rule_id === matchedRule.id);
     if (!matchedEdge) {
-      const defaultEdge = edges.find((e) => e.condition_expression === null);
-
-      if (!defaultEdge) {
-        throw new StateTransitionError(
-          `No condition matched and no default edge exists on decision node id=${node.id}`,
-        );
-      }
-
-      matchedEdge = defaultEdge;
+      throw new DataIntegrityError(
+        `No edge found for rule id=${matchedRule.id} on decision node id=${this.node.id}`,
+      );
     }
 
     if (!matchedEdge.destination_node_id) {
@@ -95,10 +47,6 @@ export class DecisionNodeExecutor extends BaseExecutor {
       );
     }
 
-    return {
-      status: TaskStatuses.COMPLETED,
-      outputVariables: {},
-      nextNodeId: matchedEdge.destination_node_id,
-    };
+    return await this.getCompletedResult(matchedEdge.destination_node_id);
   }
 }

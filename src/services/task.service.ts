@@ -6,10 +6,10 @@ import type { Transaction } from "kysely";
 import { instanceRepository } from "../repositories/instance.repository.js";
 import { nodeRepository } from "../repositories/node.repository.js";
 import { db } from "../database.js";
-import { LogEventTypes, NodeTypes, TaskStatuses, TimeUnit } from "../types/enums.js";
+import { LogEventTypes, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { queueService } from "./queue.service.js";
 import { userTaskService } from "./userTaskExecution.service.js";
-import type { ContextVariables } from "../types/engine.js";
+import type { InputVariables } from "../types/engine.js";
 import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { contextUtils } from "../utils/context.utils.js";
@@ -21,8 +21,81 @@ import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import { convertToMilliseconds } from "../utils/converter.utils.js";
 
+async function createExecution(
+  instance: InstanceModel,
+  task: TaskModel,
+  node: NodeModel,
+  previousAttemptCount: number = 0,
+  transaction: Transaction<DB>,
+) {
+  const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
+  const attempts = {
+    type: "fixed",
+    delay: 1000,
+    max: 1,
+  };
+
+  if (
+    nodeSchema.type === NodeTypes.SERVICE ||
+    nodeSchema.type === NodeTypes.SCRIPT
+  ) {
+    attempts.delay = convertToMilliseconds(
+      nodeSchema.configuration.backoff.delay,
+      nodeSchema.configuration.backoff.unit,
+    );
+    attempts.type = nodeSchema.configuration.backoff.type;
+    attempts.max = nodeSchema.configuration.maxAttempts - previousAttemptCount;
+  }
+
+  if (node.type !== NodeTypes.USER) {
+    await queueService
+      .enqueue(
+        {
+          instanceId: instance.id,
+          taskId: task.id,
+          nodeId: node.id,
+        },
+        attempts.max,
+        attempts.type,
+        attempts.delay,
+      )
+      .then(() => task)
+      .catch(async (err: Error) => {
+        await engineUtils.onExecutionFailure(err, task);
+        throw new EngineError("Unable to create task.");
+      });
+
+    return task;
+  }
+
+  try {
+    const executionContext = taskService.getTaskContext(instance, node);
+
+    const taskExecution = await taskExecutionService.create(
+      instance.id,
+      task.id,
+      executionContext,
+      transaction,
+    );
+
+    await userTaskService
+      .create(node, taskExecution, executionContext, transaction)
+      .then(() => task)
+      .catch(async (err: Error) => {
+        await engineUtils.onExecutionFailure(err, task);
+        throw new EngineError("Unable to create task.");
+      });
+  } catch (err) {
+    await engineUtils.onExecutionFailure(err, task);
+    throw new EngineError("Unable to create task.");
+  }
+  getLogger().info("Created user task");
+
+  return task;
+}
+
 export const taskService = {
-  getById: async (taskId: string): Promise<TaskModel> => {
+  getByIdOrThrow: async (taskId: string): Promise<TaskModel> => {
     const task = await taskRepository.findById(taskId);
     if (!task) {
       throw new NotFoundError("Task");
@@ -78,69 +151,7 @@ export const taskService = {
         transaction,
       );
 
-      const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
-      const attempts = {
-        type: "fixed",
-        delay: 1000,
-        max: 1,
-      };
-
-      if (
-        nodeSchema.type === NodeTypes.SERVICE ||
-        nodeSchema.type === NodeTypes.SCRIPT
-      ) {
-        attempts.delay = convertToMilliseconds(
-          nodeSchema.configuration.backoff.delay,
-          nodeSchema.configuration.backoff.unit,
-        );
-        attempts.type = nodeSchema.configuration.backoff.type;
-        attempts.max = nodeSchema.configuration.maxAttempts;
-      }
-
-      if (node.type !== NodeTypes.USER) {
-        await queueService
-          .enqueue(
-            {
-              instanceId: instance.id,
-              taskId: task.id,
-              nodeId: node.id,
-            },
-            attempts.max,
-            attempts.type,
-            attempts.delay,
-          )
-          .then(() => task)
-          .catch(async (err: Error) => {
-            await engineUtils.onExecutionFailure(err, task);
-            throw new EngineError("Unable to create task.");
-          });
-
-        return task;
-      }
-
-      try {
-        const executionContext = taskService.getTaskContext(instance, node);
-
-        const taskExecution = await taskExecutionService.create(
-          task,
-          executionContext,
-          transaction,
-        );
-
-        await userTaskService
-          .create(node, taskExecution, executionContext, transaction)
-          .then(() => task)
-          .catch(async (err: Error) => {
-            await engineUtils.onExecutionFailure(err, task);
-            throw new EngineError("Unable to create task.");
-          });
-      } catch (err) {
-        await engineUtils.onExecutionFailure(err, task);
-        throw new EngineError("Unable to create task.");
-      }
-      getLogger().info("Created user task");
-
-      return task;
+      return await createExecution(instance, task, node, 0, transaction);
     };
 
     return transaction
@@ -148,17 +159,56 @@ export const taskService = {
       : await db.transaction().execute(executeCallback);
   },
 
+  resume: async (
+    node: NodeModel,
+    instance: InstanceModel,
+    transaction: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    let task = await taskRepository.findByStatusAndInstanceId(
+      instance.id,
+      TaskStatuses.PAUSED,
+    );
+    if (!task) {
+      return await taskService.create(node, instance, transaction);
+    }
+
+    const taskExecutions = await taskExecutionService.getByTaskId(task.id);
+
+    task = await taskRepository.updateById(
+      task.id,
+      {
+        status: TaskStatuses.IN_PROGRESS,
+      },
+      transaction,
+    );
+
+    await eventLogService.createTaskLog(
+      instance.id,
+      task.id,
+      LogEventTypes.RESUMED,
+      undefined,
+      undefined,
+      transaction,
+    );
+
+    return await createExecution(
+      instance,
+      task,
+      node,
+      taskExecutions.length,
+      transaction,
+    );
+  },
+
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {
-    let instanceContext: ContextVariables = {
-      constants: {},
-      fetchables: {},
-      urls: {},
-    };
+    let instanceContext: InputVariables;
 
     if (node.type === NodeTypes.START) {
-      instanceContext.constants = converterUtils.jsonValueToObject(
-        instance.input_variables,
-      );
+      instanceContext = {
+        constants: converterUtils.jsonValueToObject(instance.input_variables),
+        fetchables: {},
+        urls: {},
+      };
     } else {
       instanceContext = converterUtils.jsonValueToContextVariables(
         instance.current_variables,
@@ -170,6 +220,12 @@ export const taskService = {
     );
 
     return contextUtils.getTaskContext(instanceContext, nodeInputSchema);
+  },
+
+  getInProgressByInstanceId: async (instanceId: string) => {
+    return await taskRepository.findInProgressByInstanceIdWithRelations(
+      instanceId,
+    );
   },
 
   complete: async (
@@ -201,11 +257,10 @@ export const taskService = {
     instanceId: string,
     taskId: string,
     details: LogDetailSchema,
-    error?: Error,
     transaction?: Transaction<DB>,
   ): Promise<TaskModel> => {
     const logger = getLogger();
-    logger.info({ details, error }, `[Task] ${details.message}`);
+    logger.info({ details }, `Task id=${taskId} failed`);
 
     const executeCallback = async (transaction: Transaction<DB>) => {
       const [task] = await Promise.all([
@@ -221,6 +276,80 @@ export const taskService = {
           instanceId,
           taskId,
           LogEventTypes.FAILED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return task;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
+
+  terminate: async (
+    instanceId: string,
+    taskId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    const logger = getLogger();
+    logger.info({ details }, `Task id=${taskId} terminated`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [task] = await Promise.all([
+        taskRepository.updateById(
+          taskId,
+          {
+            status: TaskStatuses.TERMINATED,
+          },
+          transaction,
+        ),
+
+        eventLogService.createTaskLog(
+          instanceId,
+          taskId,
+          LogEventTypes.TERMINATED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return task;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
+
+  pause: async (
+    instanceId: string,
+    taskId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
+  ): Promise<TaskModel> => {
+    const logger = getLogger();
+    logger.info({ details }, `Task id=${taskId} paused`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [task] = await Promise.all([
+        taskRepository.updateById(
+          taskId,
+          {
+            status: TaskStatuses.PAUSED,
+          },
+          transaction,
+        ),
+
+        eventLogService.createTaskLog(
+          instanceId,
+          taskId,
+          LogEventTypes.PAUSED,
           details,
           undefined,
           transaction,

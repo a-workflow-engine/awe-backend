@@ -1,5 +1,6 @@
 import { evaluate } from "@bpmn-io/feelin";
-import type { Warning, WarningType } from "@bpmn-io/feelin/dist/interpreter.js";
+import type { Warning, WarningType } from "@bpmn-io/feelin";
+import { FeelDataType } from "../types/enums.js";
 
 export type FeelValidationResult = {
   valid: boolean;
@@ -106,7 +107,7 @@ export function validateUrlExpression(value: string): FeelValidationResult {
     return {
       valid: false,
       error:
-        "URL must be a FEEL expression. Use a FEEL string literal like \"https://api.example.com\" or a dynamic FEEL expression.",
+        'URL must be a FEEL expression. Use a FEEL string literal like "https://api.example.com" or a dynamic FEEL expression.',
     };
   }
 
@@ -134,4 +135,49 @@ export function validateConditionExpression(
   }
 
   return { valid: true };
+}
+
+export type FeelDataTypeMap = {
+  [FeelDataType.NUMBER]: number;
+  [FeelDataType.STRING]: string;
+  [FeelDataType.BOOLEAN]: boolean;
+  [FeelDataType.DATE]: string;
+  [FeelDataType.TIME]: string;
+  [FeelDataType.DATETIME]: string;
+  [FeelDataType.LIST]: unknown[];
+  [FeelDataType.OBJECT]: Record<string, unknown>;
+  [FeelDataType.NULL]: null;
+};
+
+export function isValidFeelType(value: unknown, type: FeelDataType): boolean {
+  switch (type) {
+    case FeelDataType.NUMBER:
+      return typeof value === "number" && !isNaN(value);
+
+    case FeelDataType.STRING:
+      return typeof value === "string";
+
+    case FeelDataType.BOOLEAN:
+      return typeof value === "boolean";
+
+    case FeelDataType.DATE:
+      return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+    case FeelDataType.TIME:
+      return typeof value === "string" && /^\d{2}:\d{2}(:\d{2})?/.test(value);
+
+    case FeelDataType.DATETIME:
+      return typeof value === "string" && !isNaN(Date.parse(value));
+
+    case FeelDataType.LIST:
+      return Array.isArray(value);
+
+    case FeelDataType.OBJECT:
+      return (
+        typeof value === "object" && value !== null && !Array.isArray(value)
+      );
+
+    case FeelDataType.NULL:
+      return value === null || value === undefined;
+  }
 }

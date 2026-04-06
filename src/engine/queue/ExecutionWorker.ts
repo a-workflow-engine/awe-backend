@@ -1,7 +1,7 @@
-import { Worker, type Job } from "bullmq";
+import { UnrecoverableError, Worker, type Job } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
 import Config from "../../config.js";
-import type { ExecutorResult, QueueJobData } from "../../types/engine.js";
+import type { QueueJobData } from "../../types/engine.js";
 import { getLogger } from "../../logger.js";
 import { taskService } from "../../services/task.service.js";
 import { engineUtils } from "../../utils/engine.utils.js";
@@ -9,9 +9,13 @@ import { instanceService } from "../../services/instance.service.js";
 import { nodeService } from "../../services/node.services.js";
 import TaskExecutor from "../executors/TaskExecutor.js";
 import type { Logger } from "pino";
-import { NodeTypes, TaskStatuses } from "../../types/enums.js";
-import { NodeSchema } from "../../schemas/node.schema.js";
-import { converterUtils } from "../../utils/converter.utils.js";
+import { TaskStatuses } from "../../types/enums.js";
+import type {
+  InstanceModel,
+  NodeModel,
+  TaskModel,
+} from "../../types/models.js";
+import { EngineError } from "../../errors/EngineError.js";
 
 export class ExecutionWorker {
   private readonly worker: Worker<QueueJobData>;
@@ -43,65 +47,70 @@ export class ExecutionWorker {
     await this.worker.close();
   }
 
+  private canExecute(instance: InstanceModel, task: TaskModel): boolean {
+    try {
+      engineUtils.validateInstanceCanExecuteOrThrow(instance);
+      engineUtils.validateTaskCanExecuteOrThrow(task);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        {
+          error: err,
+        },
+        `Cannot execute task id=${task.id} because instance status=${instance.status} and task status=${task.status}`,
+      );
+      return false;
+    }
+  }
+
   private async processJob(job: Job<QueueJobData>): Promise<void> {
     const { instanceId, taskId, nodeId } = job.data;
-    const [instance, task, node] = await Promise.all([
-      instanceService.getById(instanceId),
-      taskService.getById(taskId),
+
+    let [instance, task, node] = await Promise.all([
+      instanceService.getByIdOrThrow(instanceId),
+      taskService.getByIdOrThrow(taskId),
       nodeService.getByIdOrThrow(nodeId),
     ]);
 
-    let result: ExecutorResult = {
-      status: TaskStatuses.FAILED,
-      outputVariables: {},
-      nextNodeId: null,
-    };
-    let executionThrew = false;
-    let isLastAttempt = true;
+    const updatedModels = await engineUtils.handleInstanceControlSignal(
+      instance,
+      task,
+      node,
+    );
+
+    instance = updatedModels.instance;
+    task = updatedModels.task;
+
+    if (this.canExecute(instance, task) === false) {
+      return;
+    }
+
+    this.logger.info(
+      node.configuration,
+      `Executing task id=${task.id} type=${node.type}. Attempt: ${job.attemptsMade + 1}/${job.opts.attempts}`,
+    );
 
     try {
-      let maxAttempts = 1;
-      const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
-      if (
-        nodeSchema.type === NodeTypes.SCRIPT ||
-        nodeSchema.type === NodeTypes.SERVICE
-      ) {
-        maxAttempts = nodeSchema.configuration.maxAttempts;
-      }
-
-      isLastAttempt = job.attemptsMade >= maxAttempts - 1;
-
-      engineUtils.validateInstanceCanExecuteOrThrow(instance);
       const executionContext = taskService.getTaskContext(instance, node);
 
       const executor = new TaskExecutor(task, node);
-      this.logger.info(node.configuration, `Executing ${node.type} node`);
+      const { executionId, result } = await executor.run(executionContext);
+      await executor.end(executionId, result);
 
-      result = await executor.run(executionContext);
-    } catch (err) {
-      if (isLastAttempt) {
-        await engineUtils.onExecutionFailure(err, task);
+      const isLastAttempt = job.attemptsMade + 1 === job.opts.attempts;
+
+      if (result.status === TaskStatuses.COMPLETED || isLastAttempt) {
+        await engineUtils.updateInstanceAndTask(instance, node, task, result);
         return;
       }
+    } catch (err) {
+      await engineUtils.onExecutionFailure(err, task);
 
-      this.logger.warn(
-        { error: err },
-        `[Worker] Job ${job.id} failed on attempt ${job.attemptsMade + 1}/${node.max_attempts}`,
+      throw new UnrecoverableError(
+        err instanceof Error ? err.message : "Unknown error",
       );
-
-      executionThrew = true;
     }
 
-    await engineUtils.updateInstanceAndTask(
-      instance,
-      node,
-      task,
-      result,
-      isLastAttempt,
-    );
-
-    if (result.status !== TaskStatuses.COMPLETED || executionThrew === true) {
-      throw new Error();
-    }
+    throw new EngineError(`Task execution for task id=${task.id} failed`);
   }
 }

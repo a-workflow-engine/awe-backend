@@ -77,10 +77,10 @@ export const instanceController = {
     });
   },
 
-  advance: async (req: Request, res: Response) => {
+  resume: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    await instanceService.advanceInstance(instanceId, req.actor);
-    return res.json({});
+    const instance = await instanceService.resume(instanceId, req.actor);
+    return res.json({ instance });
   },
 
   getExecutionLogs: async (req: Request, res: Response) => {
@@ -93,5 +93,20 @@ export const instanceController = {
     const executionLogs =
       await taskExecutionService.getExecutionLogs(instanceId);
     return res.json(executionLogs);
+  },
+
+  pause: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const instance = await instanceService.signalPause(instanceId, req.actor);
+    return res.json({ instance });
+  },
+
+  terminate: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const instance = await instanceService.signalTerminate(
+      instanceId,
+      req.actor,
+    );
+    return res.json({ instance });
   },
 };

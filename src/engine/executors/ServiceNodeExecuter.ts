@@ -1,156 +1,99 @@
-import type { NodeModel } from "../../types/models.js";
 import { BaseExecutor } from "./BaseExecutor.js";
-import { ServiceNodeConfigurationSchema } from "../../schemas/node.schema.js";
-import { evaluate } from "@bpmn-io/feelin";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
-import { TaskStatuses } from "../../types/enums.js";
-import type { ContextVariables, ExecutorResult } from "../../types/engine.js";
-import { edgeService } from "../../services/edge.services.js";
-import { httpRequestService } from "../../services/httpRequest.service.js";
+import { FeelDataType, NodeTypes } from "../../types/enums.js";
+import type { Context, ExecutorResult } from "../../types/engine.js";
 import { contextUtils } from "../../utils/context.utils.js";
+import { httpService } from "../../services/http.service.js";
+import { isValidFeelType } from "../../utils/feel.utils.js";
 
-export class ServiceNodeExecutor extends BaseExecutor {
-  async execute(
-    node: NodeModel,
-    inputVariables: ContextVariables,
-  ): Promise<ExecutorResult> {
-    const parsed = ServiceNodeConfigurationSchema.safeParse(node.configuration);
-    if (!parsed.success) {
-      throw new DataIntegrityError(
-        `Service node configuration is invalid node id=${node.id}`,
-      );
+export class ServiceNodeExecutor extends BaseExecutor<
+  typeof NodeTypes.SERVICE
+> {
+  private setByJsonPath(
+    obj: Record<string, unknown>,
+    path: string,
+    value: unknown,
+  ) {
+    const errorMessage = `Invalid json path=${path} in node=${this.node.id}`;
+
+    const keys = path.replace(/^\$\./, "").split(".");
+    if (keys.length === 0) {
+      throw new DataIntegrityError(errorMessage);
     }
 
-    const configuration = parsed.data;
-
-    const feelContext = await contextUtils.evaluateContext(inputVariables);
-
-    const urlResult = evaluate(configuration.urlExpression, feelContext);
-    if (
-      urlResult.warnings.length !== 0 ||
-      typeof urlResult.value !== "string"
-    ) {
-      throw new DataIntegrityError(
-        `Invalid URL expression "${configuration.urlExpression}" in service node id=${node.id}`,
-      );
-    }
-    const url = urlResult.value;
-
-    const headers: Record<string, string> = {};
-    if (configuration.headers) {
-      for (const { key, valueExpression } of configuration.headers) {
-        const headerResult = evaluate(valueExpression, feelContext);
-        if (
-          headerResult.warnings.length !== 0 ||
-          typeof headerResult.value !== "string"
-        ) {
-          throw new DataIntegrityError(
-            `Invalid header expression "${valueExpression}" for key "${key}" in service node id=${node.id}`,
-          );
-        }
-        headers[key] = headerResult.value;
+    let current = obj;
+    for (let i = 0; i < keys.length - 1; i++) {
+      const key = keys[i];
+      if (!key) {
+        throw new DataIntegrityError(errorMessage);
       }
-    }
 
-    let requestBody: Record<string, unknown> | undefined = undefined;
-    if (configuration.body && configuration.body.length > 0) {
-      requestBody = {};
-      for (const { jsonPath, valueExpression } of configuration.body) {
-        const bodyResult = evaluate(valueExpression, feelContext);
-        if (bodyResult.warnings.length !== 0) {
-          throw new DataIntegrityError(
-            `Invalid body expression "${valueExpression}" for path "${jsonPath}" in service node id=${node.id}`,
-          );
-        }
-        const pathParts = jsonPath.split(".").filter(Boolean);
-        let current: Record<string, unknown> = requestBody;
-        for (let i = 0; i < pathParts.length - 1; i++) {
-          const part = pathParts[i];
-          if (!part) continue;
-          if (!(part in current)) {
-            current[part] = {};
-          }
-          const nextValue = current[part];
-          if (
-            typeof nextValue === "object" &&
-            nextValue !== null &&
-            !Array.isArray(nextValue)
-          ) {
-            current = nextValue as Record<string, unknown>;
-          }
-        }
-        const lastPart = pathParts[pathParts.length - 1];
-        if (lastPart) {
-          current[lastPart] = bodyResult.value;
-        }
+      if (
+        !(key in current) ||
+        typeof current[key] !== "object" ||
+        current[key] === null
+      ) {
+        current[key] = {};
       }
+      current = current[key] as Record<string, unknown>;
     }
 
-    let responseBody: unknown;
-    try {
-      switch (configuration.method) {
-        case "GET":
-          responseBody = await httpRequestService.get(url, headers);
-          break;
-        case "POST":
-          responseBody = await httpRequestService.post(
-            url,
-            requestBody ?? {},
-            headers,
-          );
-          break;
-        case "PUT":
-          responseBody = await httpRequestService.put(
-            url,
-            requestBody ?? {},
-            headers,
-          );
-          break;
-        case "PATCH":
-          responseBody = await httpRequestService.patch(
-            url,
-            requestBody ?? {},
-            headers,
-          );
-          break;
-        case "DELETE":
-          responseBody = await httpRequestService.delete(url, headers);
-          break;
-        default:
-          throw new DataIntegrityError(
-            `Unsupported HTTP method "${configuration.method}" in service node id=${node.id}`,
-          );
-      }
-    } catch (error) {
-      let error_message = "Unknown error";
-      if (error instanceof Error) {
-        error_message = `Service node failed: ${error.message}`;
-      }
-      return {
-        status: TaskStatuses.FAILED,
-        errorMessage: error_message,
-        outputVariables: {},
-        nextNodeId: null,
-      };
+    const lastKey = keys[keys.length - 1];
+    if (!lastKey) {
+      throw new DataIntegrityError(errorMessage);
     }
 
-    const outputVariables: Record<string, unknown> = {};
-    for (const responseItem of configuration.responseMap) {
-      const value = contextUtils.getByJsonPath(
-        responseBody,
-        responseItem.jsonPath,
-      );
-      outputVariables[responseItem.contextVariableName] = value;
-    }
+    current[lastKey] = value;
+  }
 
-    const [nextNode] = await edgeService.getDestinationNodeIdsBySourceNodeId(
-      node.id,
+  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+    const url = contextUtils.getFeelEvaluatedValue(
+      this.configuration.urlExpression,
+      evaluatedContext,
+      FeelDataType.STRING,
     );
 
-    return {
-      status: TaskStatuses.COMPLETED,
-      outputVariables,
-      nextNodeId: nextNode ?? null,
-    };
+    const headers: Record<string, string> = {};
+    for (const { key, valueExpression } of this.configuration.headers ?? []) {
+      headers[key] = contextUtils.getFeelEvaluatedValue(
+        valueExpression,
+        evaluatedContext,
+        FeelDataType.STRING,
+      );
+    }
+
+    let requestBody: Record<string, unknown> = {};
+    this.configuration.body?.forEach((dataMap) => {
+      const value = contextUtils.getFeelEvaluatedValue(
+        dataMap.valueExpression,
+        evaluatedContext,
+      );
+      this.setByJsonPath(requestBody, dataMap.jsonPath, value);
+    });
+
+    const response = await httpService.request(this.configuration.method, url, {
+      headers,
+      ...(this.configuration.body !== undefined ? { body: requestBody } : {}),
+    });
+
+    for (const dataMap of this.configuration.responseMap) {
+      const value = contextUtils.getByJsonPath(response.data, dataMap.jsonPath);
+      if (value === undefined) {
+        return this.getFailedResult(
+          `"${dataMap.jsonPath}" is missing from response body`,
+          { responseBody: response.data, responseStatus: response.status },
+        );
+      }
+
+      if (!isValidFeelType(value, dataMap.type)) {
+        return this.getFailedResult(
+          `"${dataMap.jsonPath}" not of type ${dataMap.type}`,
+        );
+      }
+
+      this.outputVariables[dataMap.contextVariableName] = value;
+    }
+
+    return await this.getCompletedResult();
   }
 }

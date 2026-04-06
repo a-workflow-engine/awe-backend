@@ -3,7 +3,7 @@ import { eventLogService } from "../services/eventLog.service.js";
 import z from "zod";
 
 const instanceIdParamSchema = z.object({
-  instanceId: z.string().uuid(),
+  instanceId: z.uuidv4(),
 });
 
 export const auditController = {

@@ -8,7 +8,13 @@ import {
   DecisionNodeConfigurationSchema,
   NodeSchema,
   EdgeSchema,
+  FetchableSchema,
+  StartNodeDataMapSchema,
+  RuleSchema,
+  DefaultRuleSchema,
 } from "../schemas/node.schema.js";
+import type { NodeType } from "./database.js";
+import { NodeTypes } from "./enums.js";
 
 export type StartNodeConfiguration = z.infer<
   typeof StartNodeConfigurationSchema
@@ -41,3 +47,23 @@ export type NodeInputSchema = {
 };
 
 export type NodeOuputSchema = NodeInputSchema;
+
+export type StartNodeDataMap = z.infer<typeof StartNodeDataMapSchema>;
+
+export type Fetchable = z.infer<typeof FetchableSchema>;
+
+export const NodeConfigurationSchemaMap = {
+  [NodeTypes.START]: StartNodeConfigurationSchema,
+  [NodeTypes.SERVICE]: ServiceNodeConfigurationSchema,
+  [NodeTypes.SCRIPT]: ScriptNodeConfigurationSchema,
+  [NodeTypes.USER]: UserNodeConfigurationSchema,
+  [NodeTypes.DECISION]: DecisionNodeConfigurationSchema,
+  [NodeTypes.END]: EndNodeConfigurationSchema,
+} as const;
+
+export type NodeConfiguration<T extends NodeType> = z.infer<
+  (typeof NodeConfigurationSchemaMap)[T]
+>;
+
+export type DecisionNodeRule = z.infer<typeof RuleSchema>;
+export type DecisionNodeDefaultRule = z.infer<typeof DefaultRuleSchema>;

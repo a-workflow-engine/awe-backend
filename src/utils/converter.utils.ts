@@ -1,13 +1,13 @@
-import { DataIntegrityError } from "../errors/DataIntegrity";
-import type { JsonValue } from "../types/database";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import type { JsonValue } from "../types/database.js";
 import type {
-  ContextVariables,
+  InputVariables,
   FetchableSettings,
   UrlSettings,
-} from "../types/engine";
-import { TimeUnit } from "../types/enums";
-import type { LogDetailSchema } from "../types/instanceLog";
-import type { NodeInputSchema } from "../types/workflow";
+} from "../types/engine.js";
+import { TimeUnit } from "../types/enums.js";
+import type { LogDetailSchema } from "../types/instanceLog.js";
+import type { NodeInputSchema } from "../types/workflow.js";
 import { z } from "zod";
 
 function isNodeInputSchema(value: unknown): value is NodeInputSchema {
@@ -35,7 +35,7 @@ export const converterUtils = {
     return value as JsonValue;
   },
 
-  jsonValueToContextVariables: (value: JsonValue): ContextVariables => {
+  jsonValueToContextVariables: (value: JsonValue): InputVariables => {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       throw new DataIntegrityError("Invalid context variables");
     }
@@ -46,7 +46,7 @@ export const converterUtils = {
       throw new DataIntegrityError("Invalid context variables");
     }
 
-    return obj as unknown as ContextVariables;
+    return obj as unknown as InputVariables;
   },
 
   jsonValueToNodeInputSchema: (value: JsonValue): NodeInputSchema => {
@@ -69,9 +69,7 @@ export const converterUtils = {
     throw new DataIntegrityError("Invalid Instance Log Detail schema");
   },
 
-  objectToContextVariables: (
-    obj: Record<string, unknown>,
-  ): ContextVariables => {
+  objectToContextVariables: (obj: Record<string, unknown>): InputVariables => {
     return {
       constants: isRecord(obj.constants) ? obj.constants : {},
       fetchables: isRecord(obj.fetchables)

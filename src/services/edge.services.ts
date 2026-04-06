@@ -1,15 +1,12 @@
 import type { Transaction } from "kysely";
 import type { ActorModel, EdgeModel, NodeModel } from "../types/models.js";
-import type { DecisionNodeConfiguration, Edge } from "../types/workflow.js";
+import type { Edge } from "../types/workflow.js";
 import type { DB } from "../types/database.js";
 import {
   edgeRepository,
   type NewEdge,
 } from "../repositories/edge.repository.js";
-import { NodeTypes } from "../types/enums.js";
-import { AppError } from "../errors/AppError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { nodeSchemaService } from "./nodeSchema.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { EdgeSchema } from "../schemas/node.schema.js";
 
@@ -34,7 +31,9 @@ const findNodesByEdge = (
   }
 
   if (!source) {
-    throw new AppError("source cannot be null");
+    throw new DataIntegrityError(
+      `Edge client_id=${edge.id} does not have a source node`,
+    );
   }
 
   return [source, destination];
@@ -67,56 +66,6 @@ const findNodesByEdgeModel = (
   return [source, destination];
 };
 
-const getConditionExpressionForEdge = (
-  sourceNode: NodeModel,
-  edge: Edge,
-): string | null => {
-  if (sourceNode.type !== NodeTypes.DECISION) {
-    return null;
-  }
-
-  const sourceNodeConfig = sourceNode.configuration;
-  const decisionNode = (
-    typeof sourceNodeConfig === "string"
-      ? JSON.parse(sourceNodeConfig)
-      : sourceNodeConfig
-  ) as DecisionNodeConfiguration;
-
-  if (edge.ruleId === decisionNode.defaultRule.id) {
-    return null;
-  }
-
-  for (let rule of decisionNode.rules) {
-    if (edge.ruleId === rule.id) {
-      return rule.conditionExpression;
-    }
-  }
-
-  return null;
-};
-
-const getRuleIdForEdge = (sourceNode: NodeModel, edge: EdgeModel) => {
-  const sourceNodeSchema = nodeSchemaService.getNodeSchema(sourceNode);
-  if (sourceNodeSchema.type !== NodeTypes.DECISION) {
-    return null;
-  }
-
-  if (edge.condition_expression === null) {
-    return sourceNodeSchema.configuration.defaultRule.id;
-  }
-
-  const rule = sourceNodeSchema.configuration.rules.find(
-    (rule) => rule.conditionExpression === edge.condition_expression,
-  );
-
-  if (!rule) {
-    throw new DataIntegrityError(
-      "Inconsistent state. Edge condition expression not found.",
-    );
-  }
-  return rule.id;
-};
-
 export const edgeService = {
   createMany: async (
     edges: Edge[],
@@ -126,18 +75,13 @@ export const edgeService = {
   ): Promise<EdgeModel[]> => {
     const insertEdges: NewEdge[] = edges.map((edge) => {
       const [sourceNode, destinationNode] = findNodesByEdge(nodes, edge);
-      let condition_expression = null;
-
-      if (sourceNode) {
-        condition_expression = getConditionExpressionForEdge(sourceNode, edge);
-      }
 
       return {
         client_id: edge.id,
         name: edge.label ?? null,
         source_node_id: sourceNode.id,
         destination_node_id: destinationNode?.id ?? null,
-        condition_expression: condition_expression,
+        rule_id: edge.ruleId === undefined ? null : edge.ruleId,
         created_by: actor.id,
         modified_by: actor.id,
         is_deleted: false,
@@ -155,7 +99,7 @@ export const edgeService = {
       label: edge.name,
       sourceNodeId: sourceNode.client_id,
       targetNodeId: destinationNode?.client_id ?? null,
-      ruleId: getRuleIdForEdge(sourceNode, edge),
+      ruleId: edge.rule_id,
     });
   },
 

@@ -7,7 +7,13 @@ import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { LogEventTypes, InstanceStatuses } from "../types/enums.js";
+import {
+  LogEventTypes,
+  InstanceStatuses,
+  TaskStatuses,
+  InstanceControlSignals,
+  NodeTypes,
+} from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
@@ -22,6 +28,8 @@ import { getLogger } from "../logger.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
+import { queueService } from "./queue.service.js";
+import { taskExecutionService } from "./taskExecution.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -113,7 +121,7 @@ export const instanceService = {
       }
       instance = await instanceService.fail(instance.id, {
         message,
-        error: err
+        error: err,
       });
     }
 
@@ -152,7 +160,7 @@ export const instanceService = {
     return { instance, workflow_name, workflowVersion, node, task };
   },
 
-  getById: async (instanceId: string): Promise<InstanceModel> => {
+  getByIdOrThrow: async (instanceId: string): Promise<InstanceModel> => {
     const instance = await instanceRepository.findById(instanceId);
     if (!instance) {
       throw new NotFoundError("Instance");
@@ -161,46 +169,49 @@ export const instanceService = {
     return instance;
   },
 
-  advanceInstance: async (instanceId: string, actor: ActorModel) => {
-    const instance = await instanceRepository.findById(instanceId);
-    if (!instance)
-      throw new NotFoundError(`Instance id=${instanceId} not found`);
-
-    if (instance.auto_advance) {
-      throw new StateTransitionError(
-        `Instance id=${instanceId} is in auto advance state`,
-      );
+  resume: async (instanceId: string, actor: ActorModel) => {
+    let instance = await instanceRepository.findById(instanceId);
+    if (!instance) {
+      throw new NotFoundError(`Instance`);
     }
+
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
 
     if (
-      !instance.auto_advance &&
-      instance.status === InstanceStatuses.IN_PROGRESS
+      instance.status !== InstanceStatuses.PAUSED ||
+      instance.control_signal !== null
     ) {
-      throw new StateTransitionError("Instance is in execution");
-    }
-
-    engineUtils.validateInstanceCanExecuteOrThrow(instance);
-
-    if (!instance.current_node_id) {
       throw new StateTransitionError(
-        `Instance id=${instanceId} has no next node.`,
+        `Instance id=${instanceId} cannot be resumed`,
       );
     }
 
-    const nextNode = await nodeService.getById(instance.current_node_id);
+    const nextNode = instance.current_node_id
+      ? await nodeService.getById(instance.current_node_id)
+      : undefined;
     if (!nextNode) {
       throw new StateTransitionError(
         `Instance id=${instanceId} has no next node.`,
       );
     }
 
-    await db.transaction().execute(async (transaction) => {
-      await instanceRepository.updateById(
-        instance.id,
-        { status: InstanceStatuses.IN_PROGRESS },
-        transaction,
-      );
-      await taskService.create(nextNode, instance, transaction);
+    return await db.transaction().execute(async (transaction) => {
+      const [updatedInstance] = await Promise.all([
+        instanceRepository.updateById(
+          instance.id,
+          { status: InstanceStatuses.IN_PROGRESS },
+          transaction,
+        ),
+        eventLogService.createInstanceLog(
+          instance.id,
+          LogEventTypes.RESUMED,
+          undefined,
+          actor.id,
+          transaction,
+        ),
+      ]);
+      await taskService.resume(nextNode, updatedInstance, transaction);
+      return updatedInstance;
     });
   },
 
@@ -228,7 +239,7 @@ export const instanceService = {
     transaction?: Transaction<DB>,
   ): Promise<InstanceModel> => {
     const logger = getLogger();
-    logger.info(details, `[Instance] ${details.message}`);
+    logger.info(details, `Instance id=${instanceId} failed`);
 
     const executeCallback = async (transaction: Transaction<DB>) => {
       const [instance] = await Promise.all([
@@ -245,6 +256,43 @@ export const instanceService = {
         eventLogService.createInstanceLog(
           instanceId,
           LogEventTypes.FAILED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return instance;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
+
+  terminate: async (
+    instanceId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceModel> => {
+    const logger = getLogger();
+    logger.info(details, `Instance id=${instanceId} terminated`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          {
+            status: InstanceStatuses.TERMINATED,
+            ended_on: new Date(),
+            current_node_id: null,
+          },
+          transaction,
+        ),
+
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.TERMINATED,
           details,
           undefined,
           transaction,
@@ -284,5 +332,185 @@ export const instanceService = {
     );
 
     return instance;
+  },
+
+  pause: async (
+    instanceId: string,
+    details: LogDetailSchema,
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceModel> => {
+    const logger = getLogger();
+    logger.info(details, `Instance id=${instanceId} paused`);
+
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      const [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          {
+            status: InstanceStatuses.PAUSED,
+            control_signal: null,
+          },
+          transaction,
+        ),
+
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.PAUSED,
+          details,
+          undefined,
+          transaction,
+        ),
+      ]);
+
+      return instance;
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
+  },
+
+  signalPause: async (
+    instanceId: string,
+    actor: ActorModel,
+  ): Promise<InstanceModel> => {
+    let instance = await instanceRepository.findById(instanceId);
+    if (!instance) {
+      throw new NotFoundError(`Instance id=${instanceId} not found`);
+    }
+
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
+
+    if (instance.status === InstanceStatuses.PAUSED) {
+      throw new StateTransitionError(`Instance is already paused`);
+    }
+
+    if (instance.control_signal !== null) {
+      throw new StateTransitionError(
+        `Instance is being ${instance.control_signal}ed`,
+      );
+    }
+
+    return await db.transaction().execute(async (transaction) => {
+      [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          { control_signal: InstanceControlSignals.PAUSE },
+          transaction,
+        ),
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.PAUSE_REQUESTED,
+          undefined,
+          actor.id,
+          transaction,
+        ),
+      ]);
+
+      if (!instance) {
+        throw new DataIntegrityError("Instance update failed");
+      }
+
+      const taskModels = await taskService.getInProgressByInstanceId(
+        instance.id,
+      );
+      if (!taskModels) {
+        return instance;
+      }
+
+      const currentNode = taskModels.node;
+
+      if (currentNode.type !== NodeTypes.USER) {
+        return instance;
+      }
+
+      await taskExecutionService.terminate(
+        instanceId,
+        taskModels.taskExecution.id,
+        {
+          message: "Task paused",
+        },
+        transaction,
+      );
+
+      const updatedModels = await engineUtils.handleInstanceControlSignal(
+        instance,
+        taskModels.task,
+        currentNode,
+        transaction,
+      );
+
+      return updatedModels.instance;
+    });
+  },
+
+  signalTerminate: async (
+    instanceId: string,
+    actor: ActorModel,
+  ): Promise<InstanceModel> => {
+    let instance = await instanceRepository.findById(instanceId);
+    if (!instance) {
+      throw new NotFoundError(`Instance id=${instanceId} not found`);
+    }
+
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
+
+    if (instance.control_signal !== null) {
+      throw new StateTransitionError(
+        `Instance is being ${instance.control_signal}ed`,
+      );
+    }
+
+    return await db.transaction().execute(async (transaction) => {
+      [instance] = await Promise.all([
+        instanceRepository.updateById(
+          instanceId,
+          { control_signal: InstanceControlSignals.TERMINATE },
+          transaction,
+        ),
+        eventLogService.createInstanceLog(
+          instanceId,
+          LogEventTypes.TERMINATE_REQUESTED,
+          undefined,
+          actor.id,
+          transaction,
+        ),
+      ]);
+
+      if (!instance) {
+        throw new DataIntegrityError("Instance update failed");
+      }
+
+      const taskModels = await taskService.getInProgressByInstanceId(
+        instance.id,
+      );
+      if (!taskModels) {
+        return instance;
+      }
+
+      const currentNode = taskModels.node;
+
+      if (currentNode.type !== NodeTypes.USER) {
+        return instance;
+      }
+
+      await taskExecutionService.terminate(
+        instanceId,
+        taskModels.taskExecution.id,
+        {
+          message: "Task terminated",
+        },
+        transaction,
+      );
+
+      const updatedModels = await engineUtils.handleInstanceControlSignal(
+        instance,
+        taskModels.task,
+        currentNode,
+        transaction,
+      );
+
+      return updatedModels.instance;
+    });
   },
 };

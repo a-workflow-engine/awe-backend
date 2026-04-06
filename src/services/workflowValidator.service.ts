@@ -67,7 +67,7 @@ type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
 const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
 
 const JSONPATH_REGEX =
-/^\$(?:\.(?:[a-zA-Z_][a-zA-Z0-9_-]*|\*)|\[(?:\d+|\*|'[^']+'|"[^"]+")\]|\.\.)*$/;
+  /^\$(?:\.(?:[a-zA-Z_][a-zA-Z0-9_-]*|\*)|\[(?:\d+|\*|'[^']+'|"[^"]+")\]|\.\.)*$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -388,7 +388,10 @@ function calculateDataFlow(
   return nodeInputs;
 }
 
-function validateStartNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateStartNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -436,7 +439,10 @@ function validateStartNode(node: NodeModel, inputVariables: Set<string>): Valida
   return errors;
 }
 
-function validateEndNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateEndNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     EndNodeConfigurationSchema,
@@ -473,7 +479,10 @@ function validateEndNode(node: NodeModel, inputVariables: Set<string>): Validati
   return errors;
 }
 
-function validateUserNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateUserNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -545,7 +554,10 @@ function validateUserNode(node: NodeModel, inputVariables: Set<string>): Validat
   return errors;
 }
 
-function validateServiceNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateServiceNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
 
@@ -623,7 +635,10 @@ function validateServiceNode(node: NodeModel, inputVariables: Set<string>): Vali
   return errors;
 }
 
-function validateScriptNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateScriptNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const assignedOutputs = new Set<string>();
   const config = converterUtils.parseOrThrow(
@@ -758,7 +773,10 @@ function validateScriptNode(node: NodeModel, inputVariables: Set<string>): Valid
   return errors;
 }
 
-function validateDecisionNode(node: NodeModel, inputVariables: Set<string>): ValidationError[] {
+function validateDecisionNode(
+  node: NodeModel,
+  inputVariables: Set<string>,
+): ValidationError[] {
   const errors: ValidationError[] = [];
   const config = converterUtils.parseOrThrow(
     DecisionNodeConfigurationSchema,
@@ -814,14 +832,20 @@ export const workflowValidatorService = {
     return { valid: errors.length === 0, errors };
   },
 
-  validateAllNodes: (nodes: NodeModel[], edges: EdgeModel[]): ValidationError[] => {
+  validateAllNodes: (
+    nodes: NodeModel[],
+    edges: EdgeModel[],
+  ): ValidationError[] => {
     const errors: ValidationError[] = [];
     let startNodes = 0;
     let endNodes = 0;
 
     const availableVariables = calculateDataFlow(nodes, edges);
 
-    const validators: Record<string, (node: NodeModel, vars: Set<string>) => ValidationError[]> = {
+    const validators: Record<
+      string,
+      (node: NodeModel, vars: Set<string>) => ValidationError[]
+    > = {
       [NodeTypes.START]: validateStartNode,
       [NodeTypes.END]: validateEndNode,
       [NodeTypes.USER]: validateUserNode,
@@ -948,7 +972,7 @@ export const workflowValidatorService = {
       const nodeOutgoingEdges = outgoingEdges.get(node.id) ?? [];
 
       const defaultEdgeCount = nodeOutgoingEdges.filter(
-        (edge) => edge.condition_expression === null,
+        (edge) => edge.rule_id === "default",
       ).length;
       if (defaultEdgeCount !== 1) {
         errors.push({
@@ -962,7 +986,7 @@ export const workflowValidatorService = {
       }
 
       const conditionalEdgeCount = nodeOutgoingEdges.filter(
-        (edge) => edge.condition_expression !== null,
+        (edge) => edge.rule_id !== "default",
       ).length;
       if (conditionalEdgeCount !== config.rules.length) {
         errors.push({
@@ -1034,7 +1058,10 @@ export const workflowValidatorService = {
     return errors;
   },
 
-  validateDefinition: (nodes: NodeModel[], edges: EdgeModel[]): ValidationResult => {
+  validateDefinition: (
+    nodes: NodeModel[],
+    edges: EdgeModel[],
+  ): ValidationResult => {
     return workflowValidatorService.validate(nodes, edges);
   },
 };

@@ -31,9 +31,11 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type InstanceControlSignal = "pause" | "terminate";
+
 export type InstanceEntityType = "instance" | "task" | "task_execution" | "user_task_execution";
 
-export type InstanceEventType = "completed" | "failed" | "paused" | "resumed" | "retried" | "started" | "terminated";
+export type InstanceEventType = "completed" | "failed" | "pause_requested" | "paused" | "resume_requested" | "resumed" | "retried" | "started" | "terminate_requested" | "terminated";
 
 export type InstanceStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
@@ -57,7 +59,7 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type StorageBuckettype = "ANALYTICS" | "STANDARD" | "VECTOR";
 
-export type TaskStatus = "completed" | "failed" | "in_progress" | "terminated";
+export type TaskStatus = "completed" | "failed" | "in_progress" | "paused" | "terminated";
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
@@ -425,6 +427,7 @@ export interface Edge {
   modified_by: string;
   modified_on: Generated<Timestamp>;
   name: string | null;
+  rule_id: string | null;
   source_node_id: string;
 }
 
@@ -496,6 +499,7 @@ export interface ExtensionsPgStatStatementsInfo {
 
 export interface Instance {
   auto_advance: Generated<boolean>;
+  control_signal: InstanceControlSignal | null;
   created_by: string;
   created_on: Generated<Timestamp>;
   current_node_id: string | null;

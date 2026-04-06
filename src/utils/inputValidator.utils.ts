@@ -1,6 +1,6 @@
 import { FeelDataType } from "../types/enums.js";
 import { evaluate } from "@bpmn-io/feelin";
-import type { ContextVariables } from "../types/engine.js";
+import type { InputVariables } from "../types/engine.js";
 import { contextUtils } from "./context.utils.js";
 
 export type InputValidationResult = {
@@ -21,7 +21,7 @@ const TIME_REGEX = /^\d{2}:\d{2}:\d{2}(\.\d{1,3})?$/;
 const DATETIME_REGEX =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?$/;
 
-const EMPTY_CONTEXT: ContextVariables = {
+const EMPTY_CONTEXT: InputVariables = {
   constants: {},
   fetchables: {},
   urls: {},
@@ -167,7 +167,7 @@ export async function evaluateValidationExpression(
   validationExpression: string,
   fieldValue: unknown,
   fieldName: string,
-  contextVariables: ContextVariables = EMPTY_CONTEXT,
+  contextVariables: InputVariables = EMPTY_CONTEXT,
 ): Promise<InputValidationResult> {
   try {
     const feelContext = await contextUtils.evaluateContext(contextVariables);
@@ -273,7 +273,7 @@ export function validateInstanceInput(
 export async function validateUserTaskInput(
   userInput: Record<string, unknown>,
   responseMap: ResponseFieldConfig[],
-  contextVariables: ContextVariables = EMPTY_CONTEXT,
+  contextVariables: InputVariables = EMPTY_CONTEXT,
 ): Promise<FieldValidationError[]> {
   const errors: FieldValidationError[] = [];
 
