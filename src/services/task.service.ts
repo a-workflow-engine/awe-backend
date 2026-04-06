@@ -171,6 +171,12 @@ export const taskService = {
     return contextUtils.getTaskContext(instanceContext, nodeInputSchema);
   },
 
+  getInProgressByInstanceId: async (instanceId: string) => {
+    return await taskRepository.findInProgressByInstanceIdWithRelations(
+      instanceId,
+    );
+  },
+
   complete: async (
     task: TaskModel,
     transaction: Transaction<DB>,

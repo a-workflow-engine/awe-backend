@@ -116,7 +116,7 @@ export const instanceRepository = {
     id: string,
     data: UpdateInstance,
     transaction?: Transaction<DB>,
-  ) => {
+  ): Promise<InstanceModel> => {
     try {
       return await (transaction ?? db)
         .updateTable("instance")

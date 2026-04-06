@@ -79,8 +79,8 @@ export const instanceController = {
 
   advance: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    await instanceService.advanceInstance(instanceId, req.actor);
-    return res.json({});
+    const instance = await instanceService.resume(instanceId, req.actor);
+    return res.json({ instance });
   },
 
   getExecutionLogs: async (req: Request, res: Response) => {
@@ -103,17 +103,6 @@ export const instanceController = {
       status: instance.status,
       currentNodeId: instance.current_node_id,
       pausedAt: new Date().toISOString(),
-    });
-  },
-
-  resume: async (req: Request, res: Response) => {
-    const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.resume(instanceId, req.actor);
-    return res.json({
-      id: instance.id,
-      status: instance.status,
-      currentNodeId: instance.current_node_id,
-      resumedAt: new Date().toISOString(),
     });
   },
 

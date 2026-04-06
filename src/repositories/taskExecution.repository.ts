@@ -41,16 +41,6 @@ export type ExecutionGraphData = {
 };
 
 export const taskExecutionRepository = {
-  findLatestByTaskId: async (taskId: string) => {
-    return await db
-      .selectFrom("task_execution")
-      .selectAll()
-      .where("task_id", "=", taskId)
-      .orderBy("started_on", "desc")
-      .limit(1)
-      .executeTakeFirst();
-  },
-
   insert: async (
     data: NewTaskExecution,
     transaction?: Transaction<DB>,
@@ -148,7 +138,11 @@ export const taskExecutionRepository = {
         conn
           .selectFrom("edge as e")
           .innerJoin("node as source", "source.id", "e.source_node_id")
-          .leftJoin("node as destination", "destination.id", "e.destination_node_id")
+          .leftJoin(
+            "node as destination",
+            "destination.id",
+            "e.destination_node_id",
+          )
           .select((eb) => [
             eb.ref("e.id").as("edge_id"),
             eb.ref("e.client_id").as("edge_client_id"),
@@ -158,7 +152,11 @@ export const taskExecutionRepository = {
             eb.ref("e.destination_node_id").as("destination_node_id"),
             eb.ref("destination.client_id").as("destination_node_client_id"),
           ])
-          .where("source.workflow_version_id", "=", instance.workflow_version_id)
+          .where(
+            "source.workflow_version_id",
+            "=",
+            instance.workflow_version_id,
+          )
           .where("e.is_deleted", "=", false)
           .orderBy("e.created_on", "asc")
           .execute() as Promise<WorkflowConnectionForExecution[]>,

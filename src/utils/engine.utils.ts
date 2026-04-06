@@ -184,30 +184,34 @@ export const engineUtils = {
     instance: InstanceModel,
     task: TaskModel,
     node: NodeModel,
-  ) => {
-    if (instance.control_signal === InstanceControlSignals.PAUSE) {
-      return await db.transaction().execute(async (transaction) => {
-        [instance, task] = await Promise.all([
-          instanceService.pause(
-            instance.id,
-            {
-              message: `Paused due to signal. Paused at node=${node.client_id}`,
-            },
-            transaction,
-          ),
-          taskService.pause(
-            instance.id,
-            task.id,
-            { message: "Instance was paused." },
-            transaction,
-          ),
-        ]);
+    transaction?: Transaction<DB>,
+  ): Promise<{ instance: InstanceModel; task: TaskModel }> => {
+    const executeCallback = async (transaction: Transaction<DB>) => {
+      if (instance.control_signal === InstanceControlSignals.PAUSE) {
+        task = await taskService.pause(
+          instance.id,
+          task.id,
+          { message: "Instance was paused." },
+          transaction,
+        );
+
+        instance = await instanceService.pause(
+          instance.id,
+          {
+            message: `Paused due to signal. Paused at node=${node.client_id}`,
+          },
+          transaction,
+        );
 
         return { instance, task };
-      });
-    }
+      }
 
-    return { instance, task };
+      return { instance, task };
+    };
+
+    return transaction
+      ? await executeCallback(transaction)
+      : await db.transaction().execute(executeCallback);
   },
 
   onExecutionFailure: async (err: unknown, task: TaskModel) => {

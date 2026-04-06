@@ -8,6 +8,7 @@ import type { TaskExecutionModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { eventLogService } from "./eventLog.service.js";
 import type { DB } from "../types/database.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 type ExecutionNodeStatus =
   | "completed"
@@ -376,5 +377,34 @@ export const taskExecutionService = {
 
       return taskExecution;
     });
+  },
+
+  terminate: async (
+    instanceId: string,
+    taskExecutionId: string,
+    details: LogDetailSchema,
+    transaction: Transaction<DB>,
+  ): Promise<TaskExecutionModel> => {
+    const [taskExecution] = await Promise.all([
+      taskExecutionRepository.updateById(
+        taskExecutionId,
+        {
+          status: TaskStatuses.TERMINATED,
+          ended_on: new Date(),
+        },
+        transaction,
+      ),
+
+      eventLogService.createTaskExecutionLog(
+        instanceId,
+        taskExecutionId,
+        LogEventTypes.TERMINATED,
+        details,
+        undefined,
+        transaction,
+      ),
+    ]);
+
+    return taskExecution;
   },
 };

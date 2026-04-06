@@ -12,6 +12,7 @@ import {
   InstanceStatuses,
   TaskStatuses,
   InstanceControlSignals,
+  NodeTypes,
 } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -28,6 +29,7 @@ import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { queueService } from "./queue.service.js";
+import { taskExecutionService } from "./taskExecution.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -167,46 +169,44 @@ export const instanceService = {
     return instance;
   },
 
-  advanceInstance: async (instanceId: string, actor: ActorModel) => {
-    const instance = await instanceRepository.findById(instanceId);
-    if (!instance)
-      throw new NotFoundError(`Instance id=${instanceId} not found`);
+  resume: async (instanceId: string, actor: ActorModel) => {
+    let instance = await instanceRepository.findById(instanceId);
+    if (!instance) throw new NotFoundError(`Instance`);
 
-    if (instance.auto_advance) {
+    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
+
+    if (instance.status !== InstanceStatuses.PAUSED) {
       throw new StateTransitionError(
-        `Instance id=${instanceId} is in auto advance state`,
+        `Instance id=${instanceId} cannot be resumed. It is not paused.`,
       );
     }
 
-    if (
-      !instance.auto_advance &&
-      instance.status === InstanceStatuses.IN_PROGRESS
-    ) {
-      throw new StateTransitionError("Instance is in execution");
-    }
-
-    engineUtils.validateInstanceCanExecuteOrThrow(instance);
-
-    if (!instance.current_node_id) {
-      throw new StateTransitionError(
-        `Instance id=${instanceId} has no next node.`,
-      );
-    }
-
-    const nextNode = await nodeService.getById(instance.current_node_id);
+    const nextNode = instance.current_node_id
+      ? await nodeService.getById(instance.current_node_id)
+      : undefined;
     if (!nextNode) {
       throw new StateTransitionError(
         `Instance id=${instanceId} has no next node.`,
       );
     }
 
-    await db.transaction().execute(async (transaction) => {
-      await instanceRepository.updateById(
-        instance.id,
-        { status: InstanceStatuses.IN_PROGRESS },
-        transaction,
-      );
-      await taskService.create(nextNode, instance, transaction);
+    return await db.transaction().execute(async (transaction) => {
+      const [updatedInstance] = await Promise.all([
+        instanceRepository.updateById(
+          instance.id,
+          { status: InstanceStatuses.IN_PROGRESS },
+          transaction,
+        ),
+        eventLogService.createInstanceLog(
+          instance.id,
+          LogEventTypes.RESUMED,
+          undefined,
+          actor.id,
+          transaction,
+        ),
+      ]);
+      await taskService.create(nextNode, updatedInstance, transaction);
+      return updatedInstance;
     });
   },
 
@@ -313,7 +313,7 @@ export const instanceService = {
 
         eventLogService.createInstanceLog(
           instanceId,
-          LogEventTypes.FAILED,
+          LogEventTypes.PAUSED,
           details,
           undefined,
           transaction,
@@ -343,8 +343,14 @@ export const instanceService = {
       throw new StateTransitionError(`Instance is already paused`);
     }
 
+    if (instance.control_signal !== null) {
+      throw new StateTransitionError(
+        `Instance is already being ${instance.control_signal}ed`,
+      );
+    }
+
     return await db.transaction().execute(async (transaction) => {
-      const [instance] = await Promise.all([
+      [instance] = await Promise.all([
         instanceRepository.updateById(
           instanceId,
           { control_signal: InstanceControlSignals.PAUSE },
@@ -359,70 +365,40 @@ export const instanceService = {
         ),
       ]);
 
-      return instance;
-    });
-  },
+      if (!instance) {
+        throw new DataIntegrityError("Instance update failed");
+      }
 
-  resume: async (
-    instanceId: string,
-    actor: ActorModel,
-  ): Promise<InstanceModel> => {
-    const instance = await instanceRepository.findById(instanceId);
-    if (!instance) {
-      throw new NotFoundError(`Instance id=${instanceId} not found`);
-    }
-
-    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
-
-    if (instance.status !== InstanceStatuses.PAUSED) {
-      throw new StateTransitionError(
-        `Cannot resume instance with status: ${instance.status}. Only paused instances can be resumed.`,
+      const taskModels = await taskService.getInProgressByInstanceId(
+        instance.id,
       );
-    }
+      if (!taskModels) {
+        return instance;
+      }
 
-    return await db.transaction().execute(async (transaction) => {
-      const updatedInstance = await instanceRepository.updateById(
+      const currentNode = taskModels.node;
+
+      if (currentNode.type !== NodeTypes.USER) {
+        return instance;
+      }
+
+      await taskExecutionService.terminate(
         instanceId,
+        taskModels.taskExecution.id,
         {
-          status: InstanceStatuses.IN_PROGRESS,
+          message: "Task paused",
         },
         transaction,
       );
 
-      await eventLogService.createInstanceLog(
-        instanceId,
-        LogEventTypes.RESUMED,
-        { message: "Instance resumed by user" },
-        actor.id,
+      const updatedModels = await engineUtils.handleInstanceControlSignal(
+        instance,
+        taskModels.task,
+        currentNode,
         transaction,
       );
 
-      // Continue execution from current node if auto_advance is enabled
-      if (updatedInstance.auto_advance && updatedInstance.current_node_id) {
-        const nextNode = await nodeService.getById(
-          updatedInstance.current_node_id,
-        );
-        if (nextNode) {
-          // Check if there's already a job in the queue for this instance
-          // to ensure idempotency (no duplicate jobs)
-          const latestTask =
-            await taskRepository.findLatestByInstanceId(instanceId);
-          const existingJob = latestTask
-            ? await queueService.getJob(latestTask.id)
-            : null;
-
-          if (!existingJob) {
-            await taskService.create(nextNode, updatedInstance, transaction);
-          } else {
-            getLogger().info(
-              { instanceId, taskId: latestTask?.id },
-              "Job already exists in queue, skipping duplicate task creation",
-            );
-          }
-        }
-      }
-
-      return updatedInstance;
+      return updatedModels.instance;
     });
   },
 

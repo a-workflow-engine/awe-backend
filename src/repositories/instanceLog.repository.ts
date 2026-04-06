@@ -2,7 +2,10 @@ import type { Insertable, Transaction } from "kysely";
 import type { DB, InstanceLog } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { InstanceEntityType, InstanceEventType } from "../types/database.js";
+import type {
+  InstanceEntityType,
+  InstanceEventType,
+} from "../types/database.js";
 import type { ActorModel } from "../types/models.js";
 import { environmentService } from "../services/environment.services.js";
 
@@ -57,7 +60,10 @@ export const instanceLogRepository = {
 
       return await query.orderBy("created_on", sortOrder).execute();
     } catch (err) {
-      throw new RepositoryError("Find instance logs by instance ID failed", err);
+      throw new RepositoryError(
+        "Find instance logs by instance ID failed",
+        err,
+      );
     }
   },
 
@@ -192,16 +198,19 @@ export const instanceLogRepository = {
         }
         const det = log.details as any;
         if (det?.message) {
-          if (!taskMessages.has(log.entity_id)) taskMessages.set(log.entity_id, []);
+          if (!taskMessages.has(log.entity_id))
+            taskMessages.set(log.entity_id, []);
           taskMessages.get(log.entity_id)!.push(det.message);
         }
         if (det?.error) {
           if (!taskErrors.has(log.entity_id)) taskErrors.set(log.entity_id, []);
-          taskErrors.get(log.entity_id)!.push(
-            typeof det.error === "string"
-              ? det.error
-              : JSON.stringify(det.error),
-          );
+          taskErrors
+            .get(log.entity_id)!
+            .push(
+              typeof det.error === "string"
+                ? det.error
+                : JSON.stringify(det.error),
+            );
         }
       }
 
@@ -229,11 +238,13 @@ export const instanceLogRepository = {
         }
         if (det?.error) {
           if (!executionErrors.has(exec.id)) executionErrors.set(exec.id, []);
-          executionErrors.get(exec.id)!.push(
-            typeof det.error === "string"
-              ? det.error
-              : JSON.stringify(det.error),
-          );
+          executionErrors
+            .get(exec.id)!
+            .push(
+              typeof det.error === "string"
+                ? det.error
+                : JSON.stringify(det.error),
+            );
         }
       }
 
@@ -257,7 +268,9 @@ export const instanceLogRepository = {
 
       let durationMs: number | null = null;
       if (instanceRow.started_on && instanceRow.ended_on) {
-        durationMs = new Date(instanceRow.ended_on).getTime() - new Date(instanceRow.started_on).getTime();
+        durationMs =
+          new Date(instanceRow.ended_on).getTime() -
+          new Date(instanceRow.started_on).getTime();
       }
 
       return {
