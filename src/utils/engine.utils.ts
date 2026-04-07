@@ -207,10 +207,10 @@ export const engineUtils = {
           transaction,
         );
 
-        instance = await instanceService.pause(
+        instance = await instanceService.terminate(
           instance.id,
           {
-            message: `Paused due to signal. Paused at node=${node.client_id}`,
+            message: `Terminated due to signal. Terminated at node=${node.client_id}`,
           },
           transaction,
         );
