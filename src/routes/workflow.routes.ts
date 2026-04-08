@@ -79,3 +79,9 @@ workflowRouter.delete(
   authenticateRequest,
   workflowGroupController.delete,
 );
+
+workflowRouter.post(
+  "/versions/:versionId/clone",
+  authenticateRequest,
+  workflowVersionController.clone,
+);
