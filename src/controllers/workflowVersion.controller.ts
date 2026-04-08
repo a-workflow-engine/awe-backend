@@ -168,4 +168,14 @@ export const workflowVersionController = {
       publishedAt: workflowVersion.published_on,
     });
   },
+
+  clone: async (req: Request, res: Response) => {
+    const data = WorkflowVersionDetailSchema.parse({
+      versionId: req.params.versionId,
+      actor: req.actor,
+    });
+    const clonedVersion = await workflowVersionService.clone(data);
+    return res.status(201).json(clonedVersion);
+  }
+
 };

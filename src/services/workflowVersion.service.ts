@@ -276,4 +276,21 @@ export const workflowVersionService = {
       return workflowVersion;
     });
   },
+
+  clone: async (data: DetailInput) => {
+    const workflowVersion = await getVersionOrThrow(data.versionId);
+
+    const nodes = await nodeService.getByWorkflowVersion(workflowVersion);
+    const edges = await edgeService.getByNodes(nodes);
+
+    return workflowVersionService.createNew({
+      workflowId: workflowVersion.workflow_id,
+      description: `Clone of version ${workflowVersion.version} - ${workflowVersion.description}`,
+      nodes: nodes.map((node) => nodeSchemaService.getNodeSchema(node)),
+      edges: edges.map((edge) => edgeService.toEdgeSchema(edge, nodes)),
+      actor: data.actor,
+    });
+
+  }
+
 };
