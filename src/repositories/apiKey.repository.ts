@@ -51,11 +51,12 @@ export const apiKeyRepository = {
       .executeTakeFirst();
   },
 
-  findById: async (id: string) => {
+  findById: async (id: string, environments: string[]) => {
     return await db
       .selectFrom("api_key")
       .selectAll()
       .where("id", "=", id)
+      .where("environment_id", "in", environments)
       .where("is_deleted", "=", false)
       .executeTakeFirst();
   },

@@ -94,7 +94,12 @@ export const apiKeyService = {
       throw new AuthError();
     }
 
-    const apiKey = await apiKeyRepository.findById(id);
+    const environments = await environmentRepository.findByOrganizationActorId(actor.id);
+    if (!environments) {
+      throw new NotFoundError("Environment not found");
+    }
+
+    const apiKey = await apiKeyRepository.findById(id, environments.map((env) => env.id));
 
     if (!apiKey) {
       baseLogger.warn(
@@ -112,15 +117,6 @@ export const apiKeyService = {
       throw new AppError("API key is already revoked", 400);
     }
 
-    const environments = await environmentRepository.findById(
-      apiKey.environment_id,
-    );
-    const environmentType = environments?.type || "unknown";
-
-    const activeKeyCount = await apiKeyRepository.countActiveByEnvironmentId(
-      apiKey.environment_id,
-    );
-
     const revokedKey = await apiKeyRepository.revokeById(id);
 
     if (!revokedKey) {
@@ -135,8 +131,6 @@ export const apiKeyService = {
       {
         apiKeyId: id,
         environmentId: apiKey.environment_id,
-        environmentType,
-        activeKeyCountBefore: activeKeyCount,
         revokedAt: revokedKey.revoked_on,
       },
       "API key revoked successfully",
