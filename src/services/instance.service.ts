@@ -34,25 +34,39 @@ import { taskExecutionService } from "./taskExecution.service.js";
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
 export const instanceService = {
-  listAll: async (actorId: string): Promise<InstanceListItem[]> => {
-    return instanceRepository.findAll(actorId);
+  listAll: async (
+    actorId: string,
+    environmentIds: string[],
+  ): Promise<InstanceListItem[]> => {
+    return instanceRepository.findAll(actorId, environmentIds);
   },
 
   listPaginated: async (
     actorId: string,
+    environmentIds: string[],
     limit: number,
     offset: number,
   ): Promise<{
     items: InstanceListItem[];
     total: number;
   }> => {
-    return instanceRepository.findWithPagination(actorId, limit, offset);
+    return instanceRepository.findWithPagination(
+      actorId,
+      environmentIds,
+      limit,
+      offset,
+    );
   },
 
-  createNew: async (data: CreateVersionInput, actor: ActorModel) => {
+  createNew: async (
+    data: CreateVersionInput,
+    actor: ActorModel,
+    environmentIds: string[],
+  ) => {
     const workflowVersion =
       await workflowVersionService.getActiveVersionByWorkflowId(
         data.workflowId,
+        environmentIds,
       );
     if (!workflowVersion) {
       throw new NotFoundError("No active workflow version found");
@@ -128,8 +142,15 @@ export const instanceService = {
     return { instance, workflowVersion };
   },
 
-  get: async (instanceId: string, actorId: string) => {
-    const instance = await instanceRepository.findById(instanceId);
+  get: async (
+    instanceId: string,
+    _actorId: string,
+    environmentIds: string[],
+  ) => {
+    const instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
     if (!instance) {
       throw new NotFoundError("Instance");
     }
@@ -169,8 +190,15 @@ export const instanceService = {
     return instance;
   },
 
-  resume: async (instanceId: string, actor: ActorModel) => {
-    let instance = await instanceRepository.findById(instanceId);
+  resume: async (
+    instanceId: string,
+    actor: ActorModel,
+    environmentIds: string[],
+  ) => {
+    let instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
     if (!instance) {
       throw new NotFoundError(`Instance`);
     }
@@ -373,8 +401,12 @@ export const instanceService = {
   signalPause: async (
     instanceId: string,
     actor: ActorModel,
+    environmentIds: string[],
   ): Promise<InstanceModel> => {
-    let instance = await instanceRepository.findById(instanceId);
+    let instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
     if (!instance) {
       throw new NotFoundError(`Instance id=${instanceId} not found`);
     }
@@ -447,8 +479,12 @@ export const instanceService = {
   signalTerminate: async (
     instanceId: string,
     actor: ActorModel,
+    environmentIds: string[],
   ): Promise<InstanceModel> => {
-    let instance = await instanceRepository.findById(instanceId);
+    let instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
     if (!instance) {
       throw new NotFoundError(`Instance id=${instanceId} not found`);
     }

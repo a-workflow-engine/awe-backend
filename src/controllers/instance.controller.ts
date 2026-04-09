@@ -4,7 +4,6 @@ import {
   InstanceCreateSchema,
   InstanceParamsSchema,
 } from "../schemas/instance.schema.js";
-import { NotFoundError } from "../errors/NotFoundError.js";
 import { taskExecutionService } from "../services/taskExecution.service.js";
 import {
   buildPaginatedResponse,
@@ -17,6 +16,7 @@ export const instanceController = {
 
     const { items, total } = await instanceService.listPaginated(
       req.actor.id,
+      req.environmentIds,
       limit,
       offset,
     );
@@ -31,6 +31,7 @@ export const instanceController = {
     const { instance, workflowVersion } = await instanceService.createNew(
       data,
       req.actor,
+      req.environmentIds,
     );
     return res.status(201).json({
       id: instance.id,
@@ -48,7 +49,7 @@ export const instanceController = {
   get: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const { instance, workflow_name, workflowVersion, node, task } =
-      await instanceService.get(instanceId, req.actor.id);
+      await instanceService.get(instanceId, req.actor.id, req.environmentIds);
     return res.json({
       id: instance.id,
       inputVariables: instance.input_variables,
@@ -79,16 +80,22 @@ export const instanceController = {
 
   resume: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.resume(instanceId, req.actor);
+    const instance = await instanceService.resume(
+      instanceId,
+      req.actor,
+      req.environmentIds,
+    );
     return res.json({ instance });
   },
 
   getExecutionLogs: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
 
-    const instance = await instanceService.get(instanceId, req.actor.id);
-    if (!instance)
-      throw new NotFoundError(`Instance id=${instanceId} not found`);
+    await instanceService.get(
+      instanceId,
+      req.actor.id,
+      req.environmentIds,
+    );
 
     const executionLogs =
       await taskExecutionService.getExecutionLogs(instanceId);
@@ -97,7 +104,11 @@ export const instanceController = {
 
   pause: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.signalPause(instanceId, req.actor);
+    const instance = await instanceService.signalPause(
+      instanceId,
+      req.actor,
+      req.environmentIds,
+    );
     return res.json({ instance });
   },
 
@@ -106,6 +117,7 @@ export const instanceController = {
     const instance = await instanceService.signalTerminate(
       instanceId,
       req.actor,
+      req.environmentIds,
     );
     return res.json({ instance });
   },

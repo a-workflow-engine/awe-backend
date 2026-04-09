@@ -13,7 +13,14 @@ export type InstanceListItem = InstanceModel & {
 };
 
 export const instanceRepository = {
-  findAll: async (actorId: string): Promise<InstanceListItem[]> => {
+  findAll: async (
+    actorId: string,
+    environmentIds: string[],
+  ): Promise<InstanceListItem[]> => {
+    if (environmentIds.length === 0) {
+      return [];
+    }
+
     try {
       return (await db
         .selectFrom("instance")
@@ -29,6 +36,7 @@ export const instanceRepository = {
           eb.ref("workflow.name").as("workflow_name"),
         ])
         .where("workflow.created_by", "=", actorId)
+        .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .execute()) as unknown as InstanceListItem[];
@@ -39,12 +47,20 @@ export const instanceRepository = {
 
   findWithPagination: async (
     actorId: string,
+    environmentIds: string[],
     limit: number,
     offset: number,
   ): Promise<{
     items: InstanceListItem[];
     total: number;
   }> => {
+    if (environmentIds.length === 0) {
+      return {
+        items: [],
+        total: 0,
+      };
+    }
+
     try {
       const items = (await db
         .selectFrom("instance")
@@ -60,6 +76,7 @@ export const instanceRepository = {
           eb.ref("workflow.name").as("workflow_name"),
         ])
         .where("workflow.created_by", "=", actorId)
+        .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .limit(limit)
@@ -76,6 +93,7 @@ export const instanceRepository = {
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .select((eb) => eb.fn.count<number>("instance.id").as("count"))
         .where("workflow.created_by", "=", actorId)
+        .where("workflow.environment_id", "in", environmentIds)
         .where("instance.is_deleted", "=", false)
         .executeTakeFirstOrThrow();
 
@@ -97,6 +115,32 @@ export const instanceRepository = {
       .selectAll()
       .where("id", "=", id)
       .where("is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
+  findByIdAndEnvironmentIds: async (
+    id: string,
+    environmentIds: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceModel | undefined> => {
+    if (environmentIds.length === 0) {
+      return undefined;
+    }
+
+    return await (transaction ?? db)
+      .selectFrom("instance")
+      .innerJoin(
+        "workflow_version",
+        "workflow_version.id",
+        "instance.workflow_version_id",
+      )
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .selectAll("instance")
+      .where("instance.id", "=", id)
+      .where("workflow.environment_id", "in", environmentIds)
+      .where("instance.is_deleted", "=", false)
+      .where("workflow_version.is_deleted", "=", false)
+      .where("workflow.is_deleted", "=", false)
       .executeTakeFirst();
   },
 
