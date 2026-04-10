@@ -1,8 +1,10 @@
 import { db } from "../database.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
+import { environmentRepository } from "../repositories/environment.repository.js";
 import {
   ActorTypes,
+  EnvironmentTypes,
   FeelDataType,
   NodeTypes,
   WorkflowVersionStatuses,
@@ -28,6 +30,7 @@ import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { nodeSchemaService } from "./nodeSchema.service.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import { ValidationError } from "../errors/ValidationError.js";
 
 export type DetailInput = z.infer<typeof WorkflowVersionDetailSchema>;
 export type StatusPartialUpdateInput = z.infer<
@@ -38,6 +41,20 @@ export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
 export type PromoteVersionInput = z.infer<typeof WorkflowVersionPromoteSchema>;
+
+const isPromotionPathAllowed = (
+  sourceEnvironmentType: string,
+  targetEnvironmentType: string,
+) => {
+  return (
+    (sourceEnvironmentType === EnvironmentTypes.DEVELOPMENT &&
+      targetEnvironmentType === EnvironmentTypes.STAGING) ||
+    (sourceEnvironmentType === EnvironmentTypes.DEVELOPMENT &&
+      targetEnvironmentType === EnvironmentTypes.PRODUCTION) ||
+    (sourceEnvironmentType === EnvironmentTypes.STAGING &&
+      targetEnvironmentType === EnvironmentTypes.PRODUCTION)
+  );
+};
 
 const getVersionOrThrow = async (
   versionId: string,
@@ -388,6 +405,44 @@ export const workflowVersionService = {
 
       if (!sourceWorkflow) {
         throw new NotFoundError("Workflow");
+      }
+
+      const sourceEnvironment = await environmentRepository.findById(
+        sourceWorkflow.environment_id,
+        transaction,
+      );
+      const targetEnvironment = await environmentRepository.findById(
+        targetEnvironmentId,
+        transaction,
+      );
+
+      if (!sourceEnvironment || !targetEnvironment) {
+        throw new ValidationError("Invalid promotion target", [
+          {
+            field: "environmentType",
+            message:
+              "Source or target environment could not be resolved for this organization",
+          },
+        ]);
+      }
+
+      if (sourceEnvironment.id === targetEnvironment.id) {
+        throw new ValidationError("Invalid promotion target", [
+          {
+            field: "environmentType",
+            message: "Source and target environments must be different",
+          },
+        ]);
+      }
+
+      if (!isPromotionPathAllowed(sourceEnvironment.type, targetEnvironment.type)) {
+        throw new ValidationError("Invalid promotion path", [
+          {
+            field: "environmentType",
+            message:
+              `Promotion from '${sourceEnvironment.type}' to '${targetEnvironment.type}' is not allowed. Allowed paths: development -> staging, development -> production, staging -> production`,
+          },
+        ]);
       }
 
       const baseWorkflowId =

@@ -27,10 +27,12 @@ export const userTaskController = {
 
   completeUserTask: async (req: Request, res: Response) => {
     const { taskId } = UserTaskParamsSchema.parse(req.params);
+    const userInput = req.body ?? {};
+    delete userInput.environmentType;
     const { taskExecution } =
       await userTaskService.completeUserTask(
         taskId,
-        req.body ?? {},
+        userInput,
         req.actor,
         req.environmentIds,
       );
