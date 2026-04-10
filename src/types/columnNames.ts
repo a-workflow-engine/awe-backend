@@ -723,6 +723,7 @@ export const vaultSecretsColumns = [
 ] as const satisfies (keyof VaultSecrets)[];
 
 export const workflowColumns = [
+  "base_workflow_id",
   "created_by",
   "created_on",
   "deleted_by",
