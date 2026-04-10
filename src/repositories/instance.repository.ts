@@ -17,6 +17,12 @@ export type InstanceListItem = InstanceModel & {
   workflow_name: string;
 };
 
+export type LockedInProgressOrPausedRelations = {
+  instance: InstanceModel | undefined;
+  task: TaskModel | undefined;
+  taskExecution: TaskExecutionModel | undefined;
+};
+
 export const instanceRepository = {
   findAll: async (actorId: string): Promise<InstanceListItem[]> => {
     try {
@@ -108,50 +114,45 @@ export const instanceRepository = {
   getLockedInProgressOrPausedRelationsById: async (
     instanceId: string,
     transaction: Transaction<DB>,
-  ): Promise<
-    | {
-        instance: InstanceModel;
-        tasks: TaskModel[];
-        taskExecutions: TaskExecutionModel[];
-      }
-    | undefined
-  > => {
-    const instance = await transaction
+  ): Promise<LockedInProgressOrPausedRelations> => {
+    const returnObject: LockedInProgressOrPausedRelations = {
+      instance: undefined,
+      task: undefined,
+      taskExecution: undefined,
+    };
+
+    returnObject.instance = await transaction
       .selectFrom("instance")
       .selectAll()
       .where("id", "=", instanceId)
       .forUpdate()
       .executeTakeFirst();
 
-    if (!instance) {
-      return undefined;
+    if (!returnObject.instance) {
+      return returnObject;
     }
 
-    const tasks = await transaction
+    returnObject.task = await transaction
       .selectFrom("task")
       .selectAll()
       .where("instance_id", "=", instanceId)
       .where("status", "in", [TaskStatuses.IN_PROGRESS, TaskStatuses.PAUSED])
       .forUpdate()
-      .execute();
+      .executeTakeFirst();
 
-    if (tasks.length === 0) {
-      return { instance, tasks, taskExecutions: [] };
+    if (!returnObject.task) {
+      return returnObject;
     }
 
-    const taskExecutions = await transaction
+    returnObject.taskExecution = await transaction
       .selectFrom("task_execution")
       .selectAll()
-      .where(
-        "task_id",
-        "in",
-        tasks.map((t) => t.id),
-      )
+      .where("task_id", "=", returnObject.task.id)
       .where("status", "=", TaskStatuses.IN_PROGRESS)
       .forUpdate()
-      .execute();
+      .executeTakeFirst();
 
-    return { instance, tasks, taskExecutions };
+    return returnObject;
   },
 
   insert: async (data: NewInstance, transaction?: Transaction<DB>) => {

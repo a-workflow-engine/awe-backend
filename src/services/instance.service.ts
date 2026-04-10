@@ -7,10 +7,7 @@ import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import {
-  LogEventTypes,
-  InstanceStatuses,
-} from "../types/enums.js";
+import { LogEventTypes, InstanceStatuses } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
@@ -30,6 +27,7 @@ import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { taskExecutionService } from "./taskExecution.service.js";
+import { tr } from "zod/locales";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -151,13 +149,14 @@ export const instanceService = {
     return { instance, workflow_name, workflowVersion, node, task };
   },
 
-  getByIdOrThrow: async (instanceId: string): Promise<InstanceModel> => {
-    const instance = await instanceRepository.findById(instanceId);
-    if (!instance) {
-      throw new NotFoundError("Instance");
-    }
-
-    return instance;
+  getLockedInProgressOrPausedRelations: async (
+    instanceId: string,
+    transaction: Transaction<DB>,
+  ) => {
+    return await instanceRepository.getLockedInProgressOrPausedRelationsById(
+      instanceId,
+      transaction,
+    );
   },
 
   createNew: async (data: CreateVersionInput, actor: ActorModel) => {
@@ -191,8 +190,8 @@ export const instanceService = {
       );
     }
 
-    let instance = await db.transaction().execute(async (transaction) => {
-      const instance = await instanceRepository.insert(
+    return await db.transaction().execute(async (transaction) => {
+      let instance = await instanceRepository.insert(
         {
           workflow_version_id: workflowVersion.id,
           status: data.autoAdvance
@@ -214,28 +213,26 @@ export const instanceService = {
         transaction: transaction,
       });
 
-      return instance;
-    });
-
-    if (instance.auto_advance === false) {
-      return { instance, workflowVersion };
-    }
-
-    try {
-      await taskService.create(startNode, instance);
-    } catch (err) {
-      let message = "Unexpected error";
-
-      if (err instanceof Error) {
-        message = message;
+      if (instance.auto_advance === false) {
+        return { instance, workflowVersion };
       }
-      instance = await instanceService.fail(instance.id, {
-        message,
-        error: err,
-      });
-    }
 
-    return { instance, workflowVersion };
+      try {
+        await taskService.create(startNode, instance, transaction);
+      } catch (err) {
+        let message = "Unexpected error";
+
+        if (err instanceof Error) {
+          message = message;
+        }
+        instance = await instanceService.fail(instance.id, {
+          message,
+          error: err,
+        });
+      }
+
+      return { instance, workflowVersion };
+    });
   },
 
   resume: async (instanceId: string, actor: ActorModel) => {

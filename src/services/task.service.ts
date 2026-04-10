@@ -110,8 +110,12 @@ async function createExecution(
         attempts.delay,
       )
       .then(() => task)
-      .catch(async (err: Error) => {
-        await engineUtils.onExecutionFailure(err, task);
+      .catch(async (error: Error) => {
+        await engineUtils.onExecutionFailure({
+          error,
+          taskId: task.id,
+          instanceId: task.instance_id,
+        });
         throw new EngineError("Unable to create task.");
       });
 
@@ -131,12 +135,20 @@ async function createExecution(
     await userTaskService
       .create(node, taskExecution, executionContext, transaction)
       .then(() => task)
-      .catch(async (err: Error) => {
-        await engineUtils.onExecutionFailure(err, task);
+      .catch(async (error: Error) => {
+        await engineUtils.onExecutionFailure({
+          error,
+          taskId: task.id,
+          instanceId: task.instance_id,
+        });
         throw new EngineError("Unable to create task.");
       });
-  } catch (err) {
-    await engineUtils.onExecutionFailure(err, task);
+  } catch (error) {
+    await engineUtils.onExecutionFailure({
+      error,
+      taskId: task.id,
+      instanceId: task.instance_id,
+    });
     throw new EngineError("Unable to create task.");
   }
   getLogger().info("Created user task");
@@ -180,7 +192,7 @@ export const taskService = {
   create: async (
     node: NodeModel,
     instance: InstanceModel,
-    transaction?: Transaction<DB>,
+    transaction: Transaction<DB>,
   ): Promise<TaskModel> => {
     const executeCallback = async (transaction: Transaction<DB>) => {
       const task = await taskRepository.insert(
@@ -245,7 +257,7 @@ export const taskService = {
       instance,
       task,
       node,
-      taskExecutions.length,
+      taskExecutions.length - 1,
       transaction,
     );
   },

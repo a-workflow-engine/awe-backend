@@ -12,11 +12,11 @@ import {
   InstanceStatuses,
   LogEventTypes,
   NodeTypes,
-  TaskStatuses,
 } from "../types/enums.js";
 import type { ActorModel, InstanceModel } from "../types/models.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { eventLogService } from "./eventLog.service.js";
+import { instanceService } from "./instance.service.js";
 import { nodeService } from "./node.services.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 
@@ -28,49 +28,56 @@ const controlSignalToEventMap: Record<
   terminate: LogEventTypes.TERMINATE_REQUESTED,
 };
 
+function validateInstanceCanBeSignaledOrThrow(
+  instance: InstanceModel,
+  controlSignal: InstanceControlSignal,
+): asserts instance is InstanceModel & { current_node_id: string } {
+  engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
+
+  if (
+    controlSignal === InstanceControlSignals.PAUSE &&
+    instance.status === InstanceStatuses.PAUSED
+  ) {
+    throw new StateTransitionError(`Instance is ${InstanceStatuses.PAUSED}`);
+  }
+
+  if (instance.control_signal !== null) {
+    throw new StateTransitionError(
+      `Instance is being ${instance.control_signal}ed`,
+    );
+  }
+
+  if (instance.current_node_id === null) {
+    throw new DataIntegrityError(
+      `No current node for instance id=${instance.id}`,
+    );
+  }
+}
+
 async function updateInstanceControlSignal(
   instanceId: string,
   controlSignal: InstanceControlSignal,
   actorId: string,
 ): Promise<InstanceModel> {
   return await db.transaction().execute(async (transaction) => {
-    const models =
-      await instanceRepository.getLockedInProgressOrPausedRelationsById(
+    let { instance, task, taskExecution } =
+      await instanceService.getLockedInProgressOrPausedRelations(
         instanceId,
         transaction,
       );
-    if (!models) {
+    if (!instance) {
       throw new NotFoundError(`Instance`);
     }
 
-    let instance = models.instance;
+    validateInstanceCanBeSignaledOrThrow(instance, controlSignal);
 
-    engineUtils.validateInstanceHasNotEndedOrThrow(instance.status);
-
-    // if the instance has not ended then it must have:
-    //    - 1 task that is either paused or in progress
-    //    - 0 or 1 executions that are is in progress
-    if (
-      instance.status !== InstanceStatuses.PAUSED &&
-      (models.tasks.length !== 1 || models.taskExecutions.length > 1)
-    ) {
+    if (!task) {
       throw new DataIntegrityError(
-        `Instance id=${instanceId} has an invalid number of tasks or executions in progress`,
+        `Task entry for instance id=${instance.id} with status=${instance.status} does not exists`,
       );
     }
 
-    if (
-      controlSignal === InstanceControlSignals.PAUSE &&
-      instance.status === InstanceStatuses.PAUSED
-    ) {
-      throw new StateTransitionError(`Instance is ${InstanceStatuses.PAUSED}`);
-    }
-
-    if (instance.control_signal !== null) {
-      throw new StateTransitionError(
-        `Instance is being ${instance.control_signal}ed`,
-      );
-    }
+    const node = await nodeService.getByIdOrThrow(instance.current_node_id);
 
     [instance] = await Promise.all([
       instanceRepository.updateById(
@@ -87,16 +94,6 @@ async function updateInstanceControlSignal(
       }),
     ]);
 
-    if (instance.current_node_id === null) {
-      throw new DataIntegrityError(
-        `No current node for instance id=${instance.id}`,
-      );
-    }
-
-    const node = await nodeService.getByIdOrThrow(instance.current_node_id);
-    const task = models.tasks[0]!;
-    const taskExecution = models.taskExecutions[0];
-
     if (node.type !== NodeTypes.USER) {
       return instance;
     }
@@ -112,12 +109,13 @@ async function updateInstanceControlSignal(
       );
     }
 
-    ({ instance } = await engineUtils.handleInstanceControlSignal(
-      instance,
-      task,
+    ({ instance } = await engineUtils.handleInstanceControlSignal({
+      instanceId: instance.id,
+      controlSignal,
+      taskId: task.id,
       node,
       transaction,
-    ));
+    }));
 
     return instance;
   });
