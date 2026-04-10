@@ -51,6 +51,8 @@ export const instanceController = {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const { instance, workflow_name, workflowVersion, node, task } =
       await instanceService.get(instanceId, req.actor.id, req.environmentIds);
+
+
     return res.json({
       id: instance.id,
       inputVariables: instance.input_variables,
@@ -105,7 +107,7 @@ export const instanceController = {
 
   pause: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
-    const instance = await instanceService.signalPause(
+    const instance = await instanceSignalService.signalPause(
       instanceId,
       req.actor,
       req.environmentIds,

@@ -27,7 +27,6 @@ import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { taskExecutionService } from "./taskExecution.service.js";
-import { tr } from "zod/locales";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -126,8 +125,15 @@ export const instanceService = {
     );
   },
 
-  get: async (instanceId: string, actorId: string) => {
-    const instance = await instanceRepository.findById(instanceId);
+  get: async (
+    instanceId: string,
+    actorId: string,
+    environmentIds: string[],
+  ) => {
+    const instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
     if (!instance) {
       throw new NotFoundError("Instance");
     }
@@ -160,15 +166,55 @@ export const instanceService = {
 
   getLockedInProgressOrPausedRelations: async (
     instanceId: string,
-    transaction: Transaction<DB>,
+    environmentIdsOrTransaction: string[] | Transaction<DB>,
+    maybeTransaction?: Transaction<DB>,
   ) => {
+    const isEnvironmentScoped = Array.isArray(environmentIdsOrTransaction);
+
+    if (isEnvironmentScoped) {
+      const environmentIds = environmentIdsOrTransaction;
+      const transaction = maybeTransaction;
+
+      if (!transaction) {
+        throw new DataIntegrityError(
+          "Transaction is required when environmentIds are provided",
+        );
+      }
+
+      const authorizedInstance =
+        await instanceRepository.findByIdAndEnvironmentIds(
+          instanceId,
+          environmentIds,
+          transaction,
+        );
+
+      if (!authorizedInstance) {
+        return {
+          instance: undefined,
+          task: undefined,
+          taskExecution: undefined,
+        };
+      }
+
+      return await instanceRepository.getLockedInProgressOrPausedRelationsById(
+        authorizedInstance.id,
+        transaction,
+      );
+    }
+
+    const transaction = environmentIdsOrTransaction;
+
     return await instanceRepository.getLockedInProgressOrPausedRelationsById(
       instanceId,
       transaction,
     );
   },
 
-  createNew: async (data: CreateVersionInput, actor: ActorModel) => {
+  createNew: async (
+    data: CreateVersionInput,
+    actor: ActorModel,
+    environmentIds: string[],
+  ) => {
     const workflowVersion =
       await workflowVersionService.getActiveVersionByWorkflowId(
         data.workflowId,
@@ -245,8 +291,15 @@ export const instanceService = {
     });
   },
 
-  resume: async (instanceId: string, actor: ActorModel) => {
-    const instance = await instanceRepository.findById(instanceId);
+  resume: async (
+    instanceId: string,
+    actor: ActorModel,
+    environmentIds: string[],
+  ) => {
+    const instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
     if (!instance) {
       throw new NotFoundError(`Instance`);
     }
