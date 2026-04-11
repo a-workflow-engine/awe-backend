@@ -35,8 +35,8 @@ export const StartNodeDataMapSchema = z.object({
 });
 
 export const SecretDataMapSchema = z.object({
-  label: z.string(),
-  secretContextName: z.string(),
+  secretId: z.string(),
+  secretVariableName: z.string(),
 });
 
 export const StartNodeConfigurationSchema = z.object({
