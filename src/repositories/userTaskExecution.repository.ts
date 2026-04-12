@@ -331,7 +331,7 @@ export const userTaskExecutionRepository = {
 
       return {
         items: formattedItems,
-        total: countResult.count,
+        total: Number(countResult.count),
       };
     } catch (err) {
       throw new RepositoryError(

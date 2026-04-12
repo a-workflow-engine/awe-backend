@@ -1,5 +1,5 @@
 import { type Insertable, type Transaction, type Updateable } from "kysely";
-import type { DB, Instance, TaskStatus } from "../types/database.js";
+import type { DB, Instance, InstanceStatus } from "../types/database.js";
 import type {
   InstanceModel,
   TaskExecutionModel,
@@ -110,10 +110,151 @@ export const instanceRepository = {
 
       return {
         items,
-        total: countResult.count,
+        total: Number(countResult.count),
       };
     } catch (err) {
       throw new RepositoryError("Find instances with pagination failed", err);
+    }
+  },
+
+  countByActorAndEnvironmentIdsAndStatus: async (
+    actorId: string,
+    environmentIds: string[],
+    status: InstanceStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<number> => {
+    if (environmentIds.length === 0) {
+      return 0;
+    }
+
+    try {
+      const result = await (transaction ?? db)
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .select((eb) => eb.fn.count<number>("instance.id").as("count"))
+        .where("workflow.created_by", "=", actorId)
+        .where("workflow.environment_id", "in", environmentIds)
+        .where("instance.is_deleted", "=", false)
+        .where("instance.status", "=", status)
+        .executeTakeFirstOrThrow();
+
+      return Number(result.count);
+    } catch (err) {
+      throw new RepositoryError(
+        "Count instances by actor, environment and status failed",
+        err,
+      );
+    }
+  },
+
+  countByEnvironmentIds: async (
+    environmentIds: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<number> => {
+    if (environmentIds.length === 0) {
+      return 0;
+    }
+
+    try {
+      const result = await (transaction ?? db)
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .select((eb) => eb.fn.count<number>("instance.id").as("count"))
+        .where("workflow.environment_id", "in", environmentIds)
+        .where("instance.is_deleted", "=", false)
+        .where("workflow_version.is_deleted", "=", false)
+        .where("workflow.is_deleted", "=", false)
+        .executeTakeFirstOrThrow();
+
+      return Number(result.count);
+    } catch (err) {
+      throw new RepositoryError(
+        "Count instances by environment failed",
+        err,
+      );
+    }
+  },
+
+  countByEnvironmentIdsAndStatus: async (
+    environmentIds: string[],
+    status: InstanceStatus,
+    transaction?: Transaction<DB>,
+  ): Promise<number> => {
+    if (environmentIds.length === 0) {
+      return 0;
+    }
+
+    try {
+      const result = await (transaction ?? db)
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .select((eb) => eb.fn.count<number>("instance.id").as("count"))
+        .where("workflow.environment_id", "in", environmentIds)
+        .where("instance.is_deleted", "=", false)
+        .where("workflow_version.is_deleted", "=", false)
+        .where("workflow.is_deleted", "=", false)
+        .where("instance.status", "=", status)
+        .executeTakeFirstOrThrow();
+
+      return Number(result.count);
+    } catch (err) {
+      throw new RepositoryError(
+        "Count instances by environment and status failed",
+        err,
+      );
+    }
+  },
+
+  findRecentByEnvironmentIds: async (
+    environmentIds: string[],
+    limit: number,
+    transaction?: Transaction<DB>,
+  ): Promise<InstanceListItem[]> => {
+    if (environmentIds.length === 0) {
+      return [];
+    }
+
+    try {
+      return (await (transaction ?? db)
+        .selectFrom("instance")
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "instance.workflow_version_id",
+        )
+        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+        .selectAll("instance")
+        .select((eb) => [
+          eb.ref("workflow_version.version").as("version_number"),
+          eb.ref("workflow.name").as("workflow_name"),
+        ])
+        .where("workflow.environment_id", "in", environmentIds)
+        .where("instance.is_deleted", "=", false)
+        .where("workflow_version.is_deleted", "=", false)
+        .where("workflow.is_deleted", "=", false)
+        .orderBy("instance.created_on", "desc")
+        .limit(limit)
+        .execute()) as unknown as InstanceListItem[];
+    } catch (err) {
+      throw new RepositoryError(
+        "Find recent instances by environment failed",
+        err,
+      );
     }
   },
 
