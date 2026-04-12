@@ -1,6 +1,7 @@
 import type {
   DecisionNodeConfiguration,
   EndNodeConfiguration,
+  Fetchable,
   Node,
   NodeConfiguration,
   NodeInputSchema,
@@ -8,12 +9,14 @@ import type {
   ScriptNodeConfiguration,
   ServiceNodeConfiguration,
   StartNodeConfiguration,
+  StartNodeDataMap,
   UserNodeConfiguration,
 } from "../types/workflow.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import type { NodeModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { NodeType } from "../types/database.js";
+import { EngineError } from "../errors/EngineError.js";
 
 function extractVariableNames(
   expression: string,
@@ -143,16 +146,71 @@ export const nodeSchemaService = {
     return converterUtils.parseOrThrow(NodeSchema, nodeObject);
   },
 
+  getFetchablesMap: (
+    inputDataMap: StartNodeDataMap[],
+    fetchables: Fetchable[],
+  ): Record<string, NodeInputSchema> => {
+    const schemas: Record<string, NodeInputSchema> = {};
+
+    fetchables.forEach((fetchable) => {
+      schemas[fetchable.id] = buildSchema({
+        expressions: [
+          fetchable.urlExpression,
+          ...(fetchable.headers?.map((b) => b.valueExpression) ?? []),
+        ],
+        includeSecrets: true,
+      }).inputSchema;
+    });
+
+    let fetchablesMap: Record<string, NodeInputSchema> = {};
+
+    inputDataMap.forEach((dataMap) => {
+      if (!dataMap.fetchableId) {
+        return;
+      }
+
+      const schema = schemas[dataMap.fetchableId];
+      if (!schema) {
+        throw new EngineError("Fetchable input schema could not be evaluated");
+      }
+
+      fetchablesMap[dataMap.contextVariableName] = schema;
+    });
+
+    return fetchablesMap;
+  },
+
   getInputOutputSchemas: (
     node: Node,
+    fetchablesMap: Record<string, NodeInputSchema>,
   ): {
     inputSchema: NodeInputSchema;
     outputSchema: NodeOuputSchema;
   } => {
-    return (
+    const schemas = (
       schemaGetters[node.type] as (
         config: NodeConfiguration<typeof node.type>,
       ) => SchemaResult
     )(node.configuration);
+
+    const inputSchemas = schemas.inputSchema.variableNames.flatMap(
+      (variableName) => {
+        const schema = fetchablesMap[variableName];
+        return schema ? [schema] : [];
+      },
+    );
+
+    inputSchemas.push(schemas.inputSchema);
+
+    schemas.inputSchema = {
+      variableNames: [
+        ...new Set(inputSchemas.flatMap((s) => s.variableNames)),
+      ],
+      secretNames: [
+        ...new Set(inputSchemas.flatMap((s) => s.secretNames)),
+      ],
+    };
+
+    return schemas;
   },
 };

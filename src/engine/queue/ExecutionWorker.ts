@@ -123,8 +123,14 @@ export class ExecutionWorker {
 
       const result = await data.executor.run();
 
-      this.finalizeExecution(job.data, data.executionId, data.executor, result);
+      this.logger.info(result, "Task execution completed");
 
+      await this.finalizeExecution(
+        job.data,
+        data.executionId,
+        data.executor,
+        result,
+      );
       if (result.status === TaskStatuses.COMPLETED || isLastAttempt) {
         return;
       }
@@ -145,8 +151,6 @@ export class ExecutionWorker {
     executor: TaskExecutor,
     result: ExecutorResult,
   ) {
-    const { instanceId, taskId, nodeId } = jobData;
-
     return await db.transaction().execute(async (transaction) => {
       const models = await engineUtils.getLockedModels({
         ...jobData,

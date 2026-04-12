@@ -268,20 +268,19 @@ export const taskService = {
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {
-    const instanceContext: Context =
-      node.type === NodeTypes.START
-        ? {
-            constants: converterUtils.jsonValueToObject(
-              instance.input_variables,
-            ),
-            fetchables: {},
-            urls: {},
-            secrets: {},
-          }
-        : converterUtils.parseOrThrow(
-            ContextSchema,
-            instance.current_variables,
-          );
+    if (node.type === NodeTypes.START) {
+      return {
+        constants: converterUtils.jsonValueToObject(instance.input_variables),
+        fetchables: {},
+        urls: {},
+        secrets: {},
+      };
+    }
+
+    const instanceContext: Context = converterUtils.parseOrThrow(
+      ContextSchema,
+      instance.current_variables,
+    );
 
     const nodeInputSchema = converterUtils.jsonValueToNodeInputSchema(
       node.input_schema,

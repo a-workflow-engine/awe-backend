@@ -25,7 +25,6 @@ export const secretController = {
   },
 
   create: async (req: Request, res: Response) => {
-    console.log(req.body);
     const { label, value, actor } = createNewSecretSchema.parse({
       ...req.body,
       actor: req.actor,

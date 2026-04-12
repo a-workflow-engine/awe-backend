@@ -25,6 +25,9 @@ export const secretRepository = {
   },
 
   findByIds: async (ids: string[]): Promise<SecretModel[]> => {
+    if (ids.length === 0) {
+      return [];
+    }
     return await db
       .selectFrom("secret")
       .selectAll()

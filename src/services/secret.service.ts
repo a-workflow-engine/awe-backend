@@ -13,7 +13,7 @@ import { secretRepository } from "../repositories/secret.repository.js";
 import { EngineError } from "../errors/EngineError.js";
 
 export const secretsClient = new SecretsManagerClient({
-  region: "ap-south-1",
+  region: Config.AWS_REGION,
 });
 
 export const secretService = {
@@ -59,6 +59,9 @@ export const secretService = {
   },
 
   getByIds: async (secretIds: string[]): Promise<Record<string, string>> => {
+    if (secretIds.length === 0) {
+      return {};
+    }
     const secrets = await secretRepository.findByIds(secretIds);
 
     const command = new BatchGetSecretValueCommand({

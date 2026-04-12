@@ -332,7 +332,7 @@ export const instanceService = {
     status: InstanceStatus,
     currentVariables: object,
     nextNodeId: string | null,
-    transaction?: Transaction<DB>,
+    transaction: Transaction<DB>,
   ) => {
     return await instanceRepository.updateById(
       instanceId,

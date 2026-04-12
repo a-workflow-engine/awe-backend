@@ -24,21 +24,17 @@ export const contextUtils = {
   },
 
   async evaluateContext(contextVariables: Context): Promise<EvaluatedContext> {
-    const { constants, fetchables, urls } = contextVariables;
+    const { constants, fetchables, urls, secrets } = contextVariables;
 
     const evaluatedContext: EvaluatedContext = {
       context: { ...constants },
       secret: {},
     };
 
-    const secrets = await secretService.getByIds(
-      Object.values(contextVariables.secrets),
-    );
+    const fetchedSecrets = await secretService.getByIds(Object.values(secrets));
 
-    for (const [variableName, secretId] of Object.entries(
-      contextVariables.secrets,
-    )) {
-      const value = secrets[secretId];
+    for (const [variableName, secretId] of Object.entries(secrets)) {
+      const value = fetchedSecrets[secretId];
       if (!value) {
         throw new EngineError(`Secret ${variableName} could not evalauted`);
       }

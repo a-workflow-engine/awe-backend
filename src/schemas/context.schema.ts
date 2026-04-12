@@ -13,8 +13,8 @@ export const FetchableSettingsSchema = z.object({
 });
 
 export const ContextSchema = z.object({
-  constants: z.record(z.string(), z.unknown()), // variableName: value
-  fetchables: z.record(z.string(), FetchableSettingsSchema), // variableName: FetchableSettings
-  urls: z.record(z.string(), UrlSettingsSchema), // urlId: settings
-  secrets: z.record(z.string(), z.string()), // variableName: secretId
+  constants: z.record(z.string(), z.unknown()).default({}), // variableName: value
+  fetchables: z.record(z.string(), FetchableSettingsSchema).default({}), // variableName: FetchableSettings
+  urls: z.record(z.string(), UrlSettingsSchema).default({}), // urlId: settings
+  secrets: z.record(z.string(), z.string()).default({}), // variableName: secretId
 });
