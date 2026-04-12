@@ -10,7 +10,6 @@ import type {
   StartNodeConfiguration,
   UserNodeConfiguration,
 } from "../types/workflow.js";
-import { NodeTypes } from "../types/enums.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import type { NodeModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -65,7 +64,7 @@ function getStartSchema(config: StartNodeConfiguration): SchemaResult {
       variableNames: config.inputDataMap
         .filter((i) => i.fetchableId === undefined)
         .map((i) => i.contextVariableName),
-      secretNames: config.secretDataMap.map((s) => s.secretVariableName),
+      secretNames: [],
     },
     outputSchema: {
       variableNames: config.inputDataMap.map((i) => i.contextVariableName),

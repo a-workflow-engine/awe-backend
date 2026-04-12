@@ -601,7 +601,7 @@ export interface Secret {
   label: string;
   modified_on: Generated<Timestamp>;
   organization_id: string | null;
-  secret_key: string | null;
+  secret_key: string;
 }
 
 export interface StorageBuckets {

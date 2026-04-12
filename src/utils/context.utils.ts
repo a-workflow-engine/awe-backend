@@ -1,12 +1,12 @@
-import type { InputVariables, Context } from "../types/engine.js";
+import type { Context, EvaluatedContext } from "../types/engine.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
-import type { NodeInputSchema } from "../types/workflow.js";
 import { EngineError } from "../errors/EngineError.js";
 import { JSONPath } from "jsonpath-plus";
 import { FeelDataType } from "../types/enums.js";
 import { isValidFeelType, type FeelDataTypeMap } from "./feel.utils.js";
 import { httpService } from "../services/http.service.js";
+import { secretService } from "../services/secret.service.js";
 
 export const contextUtils = {
   getByJsonPath(data: any, path: string): unknown {
@@ -23,10 +23,28 @@ export const contextUtils = {
     }
   },
 
-  async evaluateContext(contextVariables: InputVariables): Promise<Context> {
+  async evaluateContext(contextVariables: Context): Promise<EvaluatedContext> {
     const { constants, fetchables, urls } = contextVariables;
 
-    const returnContext: Record<string, unknown> = { ...constants };
+    const evaluatedContext: EvaluatedContext = {
+      context: { ...constants },
+      secret: {},
+    };
+
+    const secrets = await secretService.getByIds(
+      Object.values(contextVariables.secrets),
+    );
+
+    for (const [variableName, secretId] of Object.entries(
+      contextVariables.secrets,
+    )) {
+      const value = secrets[secretId];
+      if (!value) {
+        throw new EngineError(`Secret ${variableName} could not evalauted`);
+      }
+
+      evaluatedContext.secret[variableName] = value;
+    }
 
     const fetchedResponses: Record<string, unknown> = {};
 
@@ -43,9 +61,7 @@ export const contextUtils = {
       if (!(urlId in fetchedResponses)) {
         const url = contextUtils.getFeelEvaluatedValue(
           urlSettings.urlExpression,
-          {
-            context: returnContext,
-          },
+          evaluatedContext,
           FeelDataType.STRING,
         );
 
@@ -53,9 +69,7 @@ export const contextUtils = {
         for (const [key, value] of Object.entries(urlSettings.headers)) {
           headers[key] = contextUtils.getFeelEvaluatedValue(
             value,
-            {
-              context: returnContext,
-            },
+            evaluatedContext,
             FeelDataType.STRING,
           );
         }
@@ -76,15 +90,15 @@ export const contextUtils = {
         );
       }
 
-      returnContext[varName] = varValue;
+      evaluatedContext.context[varName] = varValue;
     }
 
-    return { context: returnContext };
+    return evaluatedContext;
   },
 
   getFeelEvaluatedValue<T extends FeelDataType>(
     expression: string,
-    context: Context,
+    context: EvaluatedContext,
     dataType?: T,
   ): FeelDataTypeMap[T] {
     const result = evaluate(expression, context);
@@ -100,45 +114,5 @@ export const contextUtils = {
     }
 
     return result.value as FeelDataTypeMap[T];
-  },
-
-  getTaskContext(
-    instanceContext: InputVariables,
-    inputSchema: NodeInputSchema, 
-  ): InputVariables {
-    const { constants, fetchables, urls } = instanceContext;
-    const taskContext: InputVariables = {
-      constants: {},
-      fetchables: {},
-      urls: {},
-    };
-
-    inputSchema.variableNames.forEach((variableName) => {
-      if (variableName in constants) {
-        taskContext.constants[variableName] = constants[variableName];
-        return;
-      }
-
-      const fetchable = fetchables[variableName];
-
-      if (fetchable === undefined) {
-        throw new EngineError(
-          `Required variable ${variableName} does not exists in context`,
-        );
-      }
-
-      taskContext.fetchables[variableName] = fetchable;
-
-      const urlSettings = urls[fetchable.urlId];
-      if (!urlSettings) {
-        throw new DataIntegrityError(
-          `Context does not have referenced url of id=${fetchable.urlId} `,
-        );
-      }
-
-      taskContext.urls[fetchable.urlId] = urlSettings;
-    });
-
-    return taskContext;
   },
 };

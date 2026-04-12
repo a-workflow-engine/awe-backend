@@ -9,7 +9,7 @@ import { db } from "../database.js";
 import { LogEventTypes, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { queueService } from "./queue.service.js";
 import { userTaskService } from "./userTaskExecution.service.js";
-import type { InputVariables } from "../types/engine.js";
+import type { Context } from "../types/engine.js";
 import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { contextUtils } from "../utils/context.utils.js";
@@ -18,8 +18,13 @@ import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { EngineError } from "../errors/EngineError.js";
 import { taskExecutionService } from "./taskExecution.service.js";
-import { NodeSchema } from "../schemas/node.schema.js";
+import {
+  NodeSchema,
+  StartNodeConfigurationSchema,
+} from "../schemas/node.schema.js";
 import { convertToMilliseconds } from "../utils/converter.utils.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { ContextSchema } from "../schemas/context.schema.js";
 
 const taskStatusToEventMap: Record<TaskStatus, InstanceEventType> = {
   in_progress: LogEventTypes.RESUMED,
@@ -263,25 +268,71 @@ export const taskService = {
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {
-    let instanceContext: InputVariables;
-
-    if (node.type === NodeTypes.START) {
-      instanceContext = {
-        constants: converterUtils.jsonValueToObject(instance.input_variables),
-        fetchables: {},
-        urls: {},
-      };
-    } else {
-      instanceContext = converterUtils.jsonValueToContextVariables(
-        instance.current_variables,
-      );
-    }
+    const instanceContext: Context =
+      node.type === NodeTypes.START
+        ? {
+            constants: converterUtils.jsonValueToObject(
+              instance.input_variables,
+            ),
+            fetchables: {},
+            urls: {},
+            secrets: {},
+          }
+        : converterUtils.parseOrThrow(
+            ContextSchema,
+            instance.current_variables,
+          );
 
     const nodeInputSchema = converterUtils.jsonValueToNodeInputSchema(
       node.input_schema,
     );
 
-    return contextUtils.getTaskContext(instanceContext, nodeInputSchema);
+    const taskContext: Context = {
+      constants: {},
+      fetchables: {},
+      urls: {},
+      secrets: {},
+    };
+
+    nodeInputSchema.variableNames.forEach((variableName) => {
+      if (variableName in instanceContext.constants) {
+        taskContext.constants[variableName] =
+          instanceContext.constants[variableName];
+        return;
+      }
+
+      const fetchable = instanceContext.fetchables[variableName];
+
+      if (fetchable === undefined) {
+        throw new EngineError(
+          `Required variable ${variableName} does not exists in context`,
+        );
+      }
+
+      taskContext.fetchables[variableName] = fetchable;
+
+      const urlSettings = instanceContext.urls[fetchable.urlId];
+      if (!urlSettings) {
+        throw new DataIntegrityError(
+          `Context does not have referenced url of id=${fetchable.urlId} `,
+        );
+      }
+
+      taskContext.urls[fetchable.urlId] = urlSettings;
+    });
+
+    nodeInputSchema.secretNames.forEach((secretName) => {
+      const secretId = instanceContext.secrets[secretName];
+      if (!secretId) {
+        throw new EngineError(
+          `Required secret ${secretName} does not exists in context`,
+        );
+      }
+
+      taskContext.secrets[secretName] = secretId;
+    });
+
+    return taskContext;
   },
 
   complete: async (

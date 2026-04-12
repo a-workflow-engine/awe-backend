@@ -1,7 +1,7 @@
 import type { Transaction } from "kysely";
 import { db } from "../database.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
-import type { InputVariables } from "../types/engine.js";
+import type { Context } from "../types/engine.js";
 import { LogEventTypes, TaskStatuses } from "../types/enums.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import type { TaskExecutionModel } from "../types/models.js";
@@ -203,31 +203,30 @@ export const taskExecutionService = {
         (orderByNodeId.get(b.node_id) ?? Number.MAX_SAFE_INTEGER),
     );
 
-    const executionItems: ExecutionTimelineItem[] = orderedNodes.map(
-      (node) => {
-        const outgoingConnections =
-          outgoingConnectionsByNodeId.get(node.node_id) ?? [];
+    const executionItems: ExecutionTimelineItem[] = orderedNodes.map((node) => {
+      const outgoingConnections =
+        outgoingConnectionsByNodeId.get(node.node_id) ?? [];
 
-        const nodeExecutions = executionByNodeId.get(node.node_id) ?? [];
-        const latestTaskExecution = getLatestTaskExecution(nodeExecutions);
+      const nodeExecutions = executionByNodeId.get(node.node_id) ?? [];
+      const latestTaskExecution = getLatestTaskExecution(nodeExecutions);
 
-        return {
-          nodeId: node.node_id,
-          nodeClientId: node.node_client_id,
-          nodeType: node.node_type,
-          nodeName: node.node_name,
-          node_configuration: node.node_configuration,
-          order: orderByNodeId.get(node.node_id) ?? Number.MAX_SAFE_INTEGER,
-          status: mapExecutionStatus(latestTaskExecution?.status),
-          startedOn: latestTaskExecution?.started_on ?? null,
-          endedOn: latestTaskExecution?.ended_on ?? null,
-          inputVariables: latestTaskExecution?.input_variables ?? null,
-          outputVariables: latestTaskExecution?.output_variables ?? null,
-          userTaskExecutionId: latestTaskExecution?.user_task_execution_id ?? null,
-          outgoingConnections,
-        };
-      },
-    );
+      return {
+        nodeId: node.node_id,
+        nodeClientId: node.node_client_id,
+        nodeType: node.node_type,
+        nodeName: node.node_name,
+        node_configuration: node.node_configuration,
+        order: orderByNodeId.get(node.node_id) ?? Number.MAX_SAFE_INTEGER,
+        status: mapExecutionStatus(latestTaskExecution?.status),
+        startedOn: latestTaskExecution?.started_on ?? null,
+        endedOn: latestTaskExecution?.ended_on ?? null,
+        inputVariables: latestTaskExecution?.input_variables ?? null,
+        outputVariables: latestTaskExecution?.output_variables ?? null,
+        userTaskExecutionId:
+          latestTaskExecution?.user_task_execution_id ?? null,
+        outgoingConnections,
+      };
+    });
 
     return {
       data: {
@@ -239,7 +238,7 @@ export const taskExecutionService = {
   create: async (
     instanceId: string,
     taskId: string,
-    inputVariables: InputVariables,
+    inputVariables: Context,
     transaction?: Transaction<DB>,
   ): Promise<TaskExecutionModel> => {
     const executeCallback = async (transaction: Transaction<DB>) => {

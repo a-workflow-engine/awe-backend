@@ -3,7 +3,7 @@ import { contextUtils } from "../../utils/context.utils.js";
 import { NodeTypes, TaskStatuses } from "../../types/enums.js";
 import type {
   ExecutorResult,
-  Context,
+  EvaluatedContext,
   ScriptExecutionService,
 } from "../../types/engine.js";
 import { JDoodleService } from "../services/jdoodle.service.js";
@@ -17,7 +17,7 @@ const executionServiceRegistry: Record<string, ScriptExecutionService> = {
 };
 
 export class ScriptNodeExecutor extends BaseExecutor<typeof NodeTypes.SCRIPT> {
-  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     const parameters = this.configuration.parameterMap.map((dataMap) =>
       contextUtils.getFeelEvaluatedValue(
         dataMap.valueExpression,

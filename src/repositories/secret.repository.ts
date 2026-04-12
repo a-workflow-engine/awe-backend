@@ -24,12 +24,12 @@ export const secretRepository = {
       .execute();
   },
 
-  findById: async (id: string) => {
+  findByIds: async (ids: string[]): Promise<SecretModel[]> => {
     return await db
       .selectFrom("secret")
       .selectAll()
-      .where("id", "=", id)
-      .executeTakeFirst();
+      .where("id", "in", ids)
+      .execute();
   },
 
   findByLabelAndEnvironment: async (label: string, environmentId: string) => {

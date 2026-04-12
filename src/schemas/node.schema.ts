@@ -2,17 +2,7 @@ import { z } from "zod";
 import { FeelDataType, NodeTypes, TimeUnit } from "../types/enums.js";
 import { HttpMethodSchema } from "../types/http.js";
 
-export const FeelDataTypeSchema = z.enum([
-  FeelDataType.NUMBER,
-  FeelDataType.STRING,
-  FeelDataType.BOOLEAN,
-  FeelDataType.DATE,
-  FeelDataType.TIME,
-  FeelDataType.DATETIME,
-  FeelDataType.LIST,
-  FeelDataType.OBJECT,
-  FeelDataType.NULL,
-]);
+export const FeelDataTypeSchema = z.enum(Object.values(FeelDataType));
 
 const HttpHeaderSchema = z.object({
   key: z.string(),

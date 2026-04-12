@@ -1,26 +1,20 @@
 import type { ActorModel } from "../types/models.js";
-import { SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
-import { CreateSecretCommand } from "@aws-sdk/client-secrets-manager";
+import {
+  SecretsManagerClient,
+  BatchGetSecretValueCommand,
+  CreateSecretCommand,
+} from "@aws-sdk/client-secrets-manager";
 import { organizationRepository } from "../repositories/organization.repository.js";
 import { environmentService } from "./environment.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import Config from "../config.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import { secretRepository } from "../repositories/secret.repository.js";
-import { env } from "process";
+import { EngineError } from "../errors/EngineError.js";
 
 export const secretsClient = new SecretsManagerClient({
   region: "ap-south-1",
 });
-
-export async function createSecret(params: {
-  tenantId: string;
-  secretId: string;
-  value: string;
-  kmsKeyId: string;
-}) {
-  return;
-}
 
 export const secretService = {
   createNew: async (
@@ -62,5 +56,30 @@ export const secretService = {
     }
 
     return await secretRepository.findByOrganizationId(organization.id);
+  },
+
+  getByIds: async (secretIds: string[]): Promise<Record<string, string>> => {
+    const secrets = await secretRepository.findByIds(secretIds);
+
+    const command = new BatchGetSecretValueCommand({
+      SecretIdList: secrets.map((secret) => secret.secret_key),
+    });
+
+    const res = await secretsClient.send(command);
+    if (!res.SecretValues) {
+      throw new EngineError("Unable to fetch secrets", res.Errors);
+    }
+
+    return Object.fromEntries(
+      res.SecretValues.map((value) => {
+        const secret = secrets.find((s) => s.secret_key === value.Name);
+
+        if (!value.Name || !value.SecretString || !secret) {
+          throw new EngineError("Unable to fetch secrets", res.Errors);
+        }
+
+        return [secret.id, value.SecretString];
+      }),
+    );
   },
 };
