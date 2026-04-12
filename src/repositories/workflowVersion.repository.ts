@@ -106,7 +106,7 @@ export const workflowVersionRepository = {
 
       return {
         items,
-        total: countResult.count,
+        total: Number(countResult.count),
       };
     } catch (err) {
       throw new RepositoryError(

@@ -209,6 +209,24 @@ export const workflowRepository = {
     });
   },
 
+  countByEnvironmentIds: async (
+    environmentIds: string[],
+    transaction?: Transaction<DB>,
+  ): Promise<number> => {
+    if (environmentIds.length === 0) {
+      return 0;
+    }
+
+    const result = await (transaction ?? db)
+      .selectFrom("workflow")
+      .select((eb) => eb.fn.count<number>("id").as("count"))
+      .where("environment_id", "in", environmentIds)
+      .where("is_deleted", "=", false)
+      .executeTakeFirstOrThrow();
+
+    return Number(result.count);
+  },
+
   findByEnvironmentIdWithLatestVersionPaginated: async (
     environemntId: string,
     limit: number,
@@ -246,7 +264,7 @@ export const workflowRepository = {
     if (workflowIds.length === 0) {
       return {
         items: [],
-        total: countResult.count,
+        total: Number(countResult.count),
       };
     }
 
@@ -283,7 +301,7 @@ export const workflowRepository = {
 
     return {
       items,
-      total: countResult.count,
+      total: Number(countResult.count),
     };
   },
 
@@ -365,7 +383,7 @@ export const workflowRepository = {
 
     return {
       items,
-      total: countResult.count,
+      total: Number(countResult.count),
     };
   },
 };
