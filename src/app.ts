@@ -18,8 +18,8 @@ app.use(express.json());
 
 app.use(responseFormatter);
 
-app.use(requestLogFormatter);
-app.use(requestLoggerMiddleware);
+// app.use(requestLogFormatter);
+// app.use(requestLoggerMiddleware);
 
 app.get("/health", (_, res) => {
   res.json({ status: "ok" });

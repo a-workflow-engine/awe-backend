@@ -103,28 +103,6 @@ function getNodeOutputVariables(node: NodeModel): Set<string> {
   return new Set(parsedSchema.variableNames);
 }
 
-function validateContextReferences(
-  expression: string | undefined,
-  nodeId: string,
-  messagePrefix: string,
-  inputVariables: Set<string>,
-  errors: ValidationError[],
-): void {
-  if (!expression?.trim()) return;
-
-  const missing = extractContextReferences(expression).filter(
-    (name) => !inputVariables.has(name),
-  );
-
-  if (missing.length > 0) {
-    errors.push({
-      code: ValidationErrorCode.INVALID_CONTEXT_VARIABLE_REFERENCE,
-      message: `${messagePrefix} - unknown context variable(s): ${missing.join(", ")}`,
-      nodeId,
-    });
-  }
-}
-
 function isValidJsonPath(path: string): boolean {
   if (!path) return false;
   return JSONPATH_REGEX.test(path.trim());
@@ -316,15 +294,6 @@ function validateExpression(
     return;
   }
 
-  if (inputVariables) {
-    validateContextReferences(
-      expression,
-      nodeId,
-      messagePrefix,
-      inputVariables,
-      errors,
-    );
-  }
 }
 
 function validateRequired(

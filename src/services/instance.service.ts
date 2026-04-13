@@ -7,7 +7,11 @@ import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { LogEventTypes, InstanceStatuses, TaskStatuses } from "../types/enums.js";
+import {
+  LogEventTypes,
+  InstanceStatuses,
+  TaskStatuses,
+} from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
@@ -27,6 +31,8 @@ import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { taskExecutionService } from "./taskExecution.service.js";
+import { ContextSchema } from "../schemas/context.schema.js";
+import type { Context } from "../types/engine.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -34,6 +40,7 @@ type UpdateInstanceStatusParams = {
   instanceId: string;
   status: InstanceStatus;
   outputVariables?: Record<string, unknown>;
+  currentVariables?: Record<string, unknown>;
   details?: LogDetailSchema | undefined;
   actorId?: string | undefined;
   transaction?: Transaction<DB> | undefined;
@@ -64,6 +71,11 @@ async function updateInstanceStatus(
         {
           status: params.status,
           control_signal: null,
+          ...(params.currentVariables !== undefined && {
+            current_variables: converterUtils.objectToJsonValue(
+              params.currentVariables,
+            ),
+          }),
 
           ...(isTerminalUpdate && {
             ended_on: new Date(),
@@ -287,10 +299,15 @@ export const instanceService = {
         if (err instanceof Error) {
           message = err.message || message;
         }
-        instance = await instanceService.fail(instance.id, {
-          message,
-          error: err,
-        });
+
+        instance = await instanceService.fail(
+          instance.id,
+          {
+            message,
+            error: err,
+          },
+          transaction,
+        );
       }
 
       return { instance, workflowVersion };
@@ -345,7 +362,7 @@ export const instanceService = {
   fail: async (
     instanceId: string,
     details: LogDetailSchema,
-    transaction?: Transaction<DB>,
+    transaction: Transaction<DB>,
   ): Promise<InstanceModel> => {
     return await updateInstanceStatus({
       instanceId,
@@ -401,7 +418,7 @@ export const instanceService = {
     status: InstanceStatus,
     currentVariables: object,
     nextNodeId: string | null,
-    transaction?: Transaction<DB>,
+    transaction: Transaction<DB>,
   ) => {
     return await instanceRepository.updateById(
       instanceId,
@@ -419,6 +436,7 @@ export const instanceService = {
     actor: ActorModel,
     environmentIds: string[],
     targetTaskId?: string,
+    constantsPatch?: Record<string, unknown>,
   ) => {
     return await db.transaction().execute(async (transaction) => {
       const instance = await instanceRepository.findByIdAndEnvironmentIds(
@@ -457,13 +475,33 @@ export const instanceService = {
 
       const node = await nodeService.getById(taskToRetry.node_id);
       if (!node) {
-        throw new DataIntegrityError(`Node not found id = ${taskToRetry.node_id}`);
+        throw new DataIntegrityError(
+          `Node not found id = ${taskToRetry.node_id}`,
+        );
       }
+
+      const instanceContext = instance.current_variables
+        ? converterUtils.parseOrThrow(ContextSchema, instance.current_variables)
+        : {
+            constants: converterUtils.jsonValueToObject(instance.input_variables),
+            fetchables: {},
+            urls: {},
+            secrets: {},
+          };
+
+      const mergedContext: Context = {
+        ...instanceContext,
+        constants: {
+          ...instanceContext.constants,
+          ...(constantsPatch ?? {}),
+        },
+      };
 
       const updatedInstance = await updateInstanceStatus({
         instanceId: instance.id,
         status: InstanceStatuses.IN_PROGRESS,
         actorId: actor.id,
+        currentVariables: mergedContext,
         details: { message: "Retrying failed task" },
         transaction,
       });
@@ -478,5 +516,31 @@ export const instanceService = {
 
       return updatedInstance;
     });
+  },
+
+  getRetryConstants: async (
+    instanceId: string,
+    _actor: ActorModel,
+    environmentIds: string[],
+  ): Promise<Record<string, unknown>> => {
+    const instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
+
+    if (!instance) {
+      throw new NotFoundError("Instance");
+    }
+
+    const instanceContext = instance.current_variables
+      ? converterUtils.parseOrThrow(ContextSchema, instance.current_variables)
+      : {
+          constants: converterUtils.jsonValueToObject(instance.input_variables),
+          fetchables: {},
+          urls: {},
+          secrets: {},
+        };
+
+    return instanceContext.constants;
   },
 };

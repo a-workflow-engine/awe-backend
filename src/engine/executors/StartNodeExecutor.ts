@@ -1,7 +1,7 @@
 import { BaseExecutor } from "./BaseExecutor.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import type {
-  Context,
+  EvaluatedContext,
   ExecutorResult,
   FetchableSettings,
   UrlSettings,
@@ -39,18 +39,25 @@ export class StartNodeExecutor extends BaseExecutor<typeof NodeTypes.START> {
     };
   }
 
-  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     const inputJson = this.inputVariables.constants;
 
     let constants: Record<string, unknown> = {};
     let fetchables: Record<string, FetchableSettings> = {};
     let urls: Record<string, UrlSettings> = {};
 
-    this.outputVariables = { constants, fetchables, urls };
+    const secrets: Record<string, string> = Object.fromEntries(
+      (this.configuration.secretDataMap ?? []).map((s) => [
+        s.secretVariableName,
+        s.secretId,
+      ]),
+    );
 
-    for (const dataMap of this.configuration.inputDataMap) {
+    this.outputVariables = { constants, fetchables, urls, secrets };
+
+    for (const dataMap of this.configuration.inputDataMap ?? []) {
       if (dataMap.fetchableId) {
-        const fetchable = this.configuration.fetchables.find(
+        const fetchable = (this.configuration.fetchables ?? []).find(
           (f) => f.id === dataMap.fetchableId,
         );
         if (!fetchable) {

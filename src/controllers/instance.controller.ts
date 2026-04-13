@@ -10,6 +10,11 @@ import {
   parsePaginationFromRequest,
 } from "../utils/pagination.utils.js";
 import { instanceSignalService } from "../services/instanceSignal.service.js";
+import { z } from "zod";
+
+const RetryInstanceBodySchema = z.object({
+  constants: z.record(z.string(), z.unknown()).default({}),
+});
 
 export const instanceController = {
   list: async (req: Request, res: Response) => {
@@ -127,11 +132,25 @@ export const instanceController = {
 
   retryInstance: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const { constants } = RetryInstanceBodySchema.parse(req.body ?? {});
     const instance = await instanceService.retry(
       instanceId,
       req.actor,
       req.environmentIds,
+      undefined,
+      constants,
     );
     return res.json({ instance });
+  },
+
+  getRetryConstants: async (req: Request, res: Response) => {
+    const { instanceId } = InstanceParamsSchema.parse(req.params);
+    const constants = await instanceService.getRetryConstants(
+      instanceId,
+      req.actor,
+      req.environmentIds,
+    );
+
+    return res.json({ constants });
   },
 };
