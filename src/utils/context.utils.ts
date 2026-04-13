@@ -139,6 +139,49 @@ export const contextUtils = {
       taskContext.urls[fetchable.urlId] = urlSettings;
     });
 
+    const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
+
+    const referencedVariables = new Set<string>();
+
+    Object.values(taskContext.urls).forEach((urlSettings) => {
+      const sources: string[] = [
+        urlSettings.urlExpression,
+        ...Object.values(urlSettings.headers ?? {}),
+      ];
+
+      for (const source of sources) {
+        if (!source) continue;
+        for (const match of source.matchAll(CONTEXT_REFERENCE_REGEX)) {
+          if (match[1]) {
+            referencedVariables.add(match[1]);
+          }
+        }
+      }
+    });
+
+    referencedVariables.forEach((variableName) => {
+      if (
+        variableName in taskContext.constants ||
+        variableName in taskContext.fetchables
+      ) {
+        return;
+      }
+
+      if (variableName in constants) {
+        taskContext.constants[variableName] = constants[variableName];
+        return;
+      }
+
+      const fetchable = fetchables[variableName];
+      if (fetchable) {
+        taskContext.fetchables[variableName] = fetchable;
+        const urlSettings = urls[fetchable.urlId];
+        if (urlSettings) {
+          taskContext.urls[fetchable.urlId] = urlSettings;
+        }
+      }
+    });
+
     return taskContext;
   },
 };
