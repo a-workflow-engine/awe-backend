@@ -130,6 +130,17 @@ function isValidJsonPath(path: string): boolean {
   return JSONPATH_REGEX.test(path.trim());
 }
 
+const SIMPLE_OBJECT_PATH_REGEX =
+  /^[a-zA-Z_][a-zA-Z0-9_-]*(\.[a-zA-Z_][a-zA-Z0-9_-]*)*$/;
+
+function isValidBodyJsonPath(path: string): boolean {
+  if (!path) return false;
+  const trimmed = path.trim();
+
+  if (JSONPATH_REGEX.test(trimmed)) return true;
+  return SIMPLE_OBJECT_PATH_REGEX.test(trimmed);
+}
+
 function validateJsonPath(
   jsonPath: string | undefined,
   nodeId: string,
@@ -149,6 +160,33 @@ function validateJsonPath(
     errors.push({
       code: ValidationErrorCode.INVALID_JSON_PATH,
       message: `${message} - must be a valid JSONPath expression`,
+      nodeId,
+    });
+    return false;
+  }
+
+  return true;
+}
+
+function validateBodyJsonPath(
+  jsonPath: string | undefined,
+  nodeId: string,
+  message: string,
+  errors: ValidationError[],
+): boolean {
+  if (!jsonPath?.trim()) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_JSON_PATH,
+      message,
+      nodeId,
+    });
+    return false;
+  }
+
+  if (!isValidBodyJsonPath(jsonPath)) {
+    errors.push({
+      code: ValidationErrorCode.INVALID_JSON_PATH,
+      message: `${message} - must be a valid JSONPath or dotted object path`,
       nodeId,
     });
     return false;
@@ -399,6 +437,8 @@ function validateStartNode(
     node.configuration,
   );
 
+  const startNodeInputVariables = new Set(inputVariables);
+
   config.inputDataMap.forEach((entry, index) => {
     validateJsonPath(
       entry.jsonPath,
@@ -415,6 +455,10 @@ function validateStartNode(
     );
     if (hasContextName) {
       assignedOutputs.add(entry.contextVariableName.trim());
+
+      // if (!entry.fetchableId) {
+        startNodeInputVariables.add(entry.contextVariableName.trim());
+      // }
     }
   });
 
@@ -425,14 +469,14 @@ function validateStartNode(
       `Start node fetchable ${index + 1}: invalid URL expression`,
       errors,
       validateUrlExpression,
-      inputVariables,
+      startNodeInputVariables,
     );
     validateHeaders(
       fetchable.headers,
       node.client_id,
       `Start node fetchable ${index + 1}`,
       errors,
-      inputVariables,
+      startNodeInputVariables,
     );
   });
   validateOutputAssignments(node, assignedOutputs, errors);
@@ -585,7 +629,7 @@ function validateServiceNode(
   }
 
   config.body?.forEach((entry, index) => {
-    validateJsonPath(
+    validateBodyJsonPath(
       entry.jsonPath,
       node.client_id,
       `Service task body field ${index + 1}: jsonPath is invalid`,
