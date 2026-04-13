@@ -1,4 +1,4 @@
-import type { Actor, ApiKey, AuthAuditLogEntries, AuthCustomOauthProviders, AuthFlowState, AuthIdentities, AuthInstances, AuthMfaAmrClaims, AuthMfaChallenges, AuthMfaFactors, AuthOauthAuthorizations, AuthOauthClients, AuthOauthClientStates, AuthOauthConsents, AuthOneTimeTokens, AuthRefreshTokens, AuthSamlProviders, AuthSamlRelayStates, AuthSchemaMigrations, AuthSessions, AuthSsoDomains, AuthSsoProviders, AuthUsers, AuthWebauthnChallenges, AuthWebauthnCredentials, Edge, Environment, ExtensionsPgStatStatements, ExtensionsPgStatStatementsInfo, Instance, InstanceLog, Node, Organization, RealtimeMessages, RealtimeSchemaMigrations, RealtimeSubscription, RefreshToken, Secret, StorageBuckets, StorageBucketsAnalytics, StorageBucketsVectors, StorageMigrations, StorageObjects, StorageS3MultipartUploads, StorageS3MultipartUploadsParts, StorageVectorIndexes, System, Task, TaskExecution, UserTaskExecution, VaultDecryptedSecrets, VaultSecrets, Workflow, WorkflowVersion } from "./database.js";
+import type { Actor, ApiKey, AuthAuditLogEntries, AuthCustomOauthProviders, AuthFlowState, AuthIdentities, AuthInstances, AuthMfaAmrClaims, AuthMfaChallenges, AuthMfaFactors, AuthOauthAuthorizations, AuthOauthClients, AuthOauthClientStates, AuthOauthConsents, AuthOneTimeTokens, AuthRefreshTokens, AuthSamlProviders, AuthSamlRelayStates, AuthSchemaMigrations, AuthSessions, AuthSsoDomains, AuthSsoProviders, AuthUsers, AuthWebauthnChallenges, AuthWebauthnCredentials, Edge, Environment, ExtensionsPgStatStatements, ExtensionsPgStatStatementsInfo, Instance, InstanceLog, Node, Organization, RealtimeMessages, RealtimeSchemaMigrations, RealtimeSubscription, RefreshToken, SecretProvider, SecretReference, StorageBuckets, StorageBucketsAnalytics, StorageBucketsVectors, StorageMigrations, StorageObjects, StorageS3MultipartUploads, StorageS3MultipartUploadsParts, StorageVectorIndexes, System, Task, TaskExecution, UserTaskExecution, VaultDecryptedSecrets, VaultSecrets, Workflow, WorkflowVersion } from "./database.js";
 
 
 
@@ -76,7 +76,9 @@ export const realtimeSubscriptionColumns = ["action_filter","claims","claims_rol
 
 export const refreshTokenColumns = ["created_on","expires_at","id","organization_id","token"] as const satisfies (keyof RefreshToken)[];
 
-export const secretColumns = ["created_on","environment_id","id","label","modified_on","organization_id","secret_key"] as const satisfies (keyof Secret)[];
+export const secretProviderColumns = ["configuration","created_on","id","label","organization_id","type","updated_on"] as const satisfies (keyof SecretProvider)[];
+
+export const secretReferenceColumns = ["created_on","environment_id","id","label","provider_id","secret_key"] as const satisfies (keyof SecretReference)[];
 
 export const storageBucketsColumns = ["allowed_mime_types","avif_autodetection","created_at","file_size_limit","id","name","owner","owner_id","public","type","updated_at"] as const satisfies (keyof StorageBuckets)[];
 

@@ -13,16 +13,12 @@ import { userTaskService } from "./userTaskExecution.service.js";
 import type { Context } from "../types/engine.js";
 import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
-import { contextUtils } from "../utils/context.utils.js";
 import { getLogger } from "../logger.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { EngineError } from "../errors/EngineError.js";
 import { taskExecutionService } from "./taskExecution.service.js";
-import {
-  NodeSchema,
-  StartNodeConfigurationSchema,
-} from "../schemas/node.schema.js";
+import { NodeSchema } from "../schemas/node.schema.js";
 import { convertToMilliseconds } from "../utils/converter.utils.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { ContextSchema } from "../schemas/context.schema.js";
@@ -85,6 +81,7 @@ async function createExecution(
   transaction: Transaction<DB>,
 ) {
   const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
+
   const attempts = {
     type: "fixed",
     delay: 1000,
@@ -100,7 +97,10 @@ async function createExecution(
       nodeSchema.configuration.backoff.unit,
     );
     attempts.type = nodeSchema.configuration.backoff.type;
-    attempts.max = Math.max(1, nodeSchema.configuration.maxAttempts - previousAttemptCount);
+    attempts.max = Math.max(
+      1,
+      nodeSchema.configuration.maxAttempts - previousAttemptCount,
+    );
   }
 
   if (node.type !== NodeTypes.USER) {

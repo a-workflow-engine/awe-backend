@@ -7,7 +7,11 @@ import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { LogEventTypes, InstanceStatuses, TaskStatuses } from "../types/enums.js";
+import {
+  LogEventTypes,
+  InstanceStatuses,
+  TaskStatuses,
+} from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import type { InstanceListItem } from "../repositories/instance.repository.js";
@@ -287,10 +291,15 @@ export const instanceService = {
         if (err instanceof Error) {
           message = err.message || message;
         }
-        instance = await instanceService.fail(instance.id, {
-          message,
-          error: err,
-        });
+
+        instance = await instanceService.fail(
+          instance.id,
+          {
+            message,
+            error: err,
+          },
+          transaction,
+        );
       }
 
       return { instance, workflowVersion };
@@ -345,7 +354,7 @@ export const instanceService = {
   fail: async (
     instanceId: string,
     details: LogDetailSchema,
-    transaction?: Transaction<DB>,
+    transaction: Transaction<DB>,
   ): Promise<InstanceModel> => {
     return await updateInstanceStatus({
       instanceId,
@@ -457,7 +466,9 @@ export const instanceService = {
 
       const node = await nodeService.getById(taskToRetry.node_id);
       if (!node) {
-        throw new DataIntegrityError(`Node not found id = ${taskToRetry.node_id}`);
+        throw new DataIntegrityError(
+          `Node not found id = ${taskToRetry.node_id}`,
+        );
       }
 
       const updatedInstance = await updateInstanceStatus({

@@ -6,7 +6,7 @@ import { JSONPath } from "jsonpath-plus";
 import { FeelDataType } from "../types/enums.js";
 import { isValidFeelType, type FeelDataTypeMap } from "./feel.utils.js";
 import { httpService } from "../services/http.service.js";
-import { secretService } from "../services/secret.service.js";
+import { secretService } from "../services/secrets/secret.service.js";
 
 export const contextUtils = {
   getByJsonPath(data: any, path: string): unknown {

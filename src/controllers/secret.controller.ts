@@ -1,36 +1,25 @@
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { ActorSchema } from "../schemas/actor.schema.js";
-import { secretService } from "../services/secret.service.js";
+import { secretService } from "../services/secrets/secret.service.js";
+import { EnvironmentTypes } from "../types/enums.js";
 
-const createNewSecretSchema = z.object({
+export const CreateNewSecretSchema = z.object({
+  providerId: z.uuidv4(),
+  environmentType: z.enum(EnvironmentTypes),
   label: z.string(),
-  value: z.string(),
+  key: z.string(),
   actor: ActorSchema,
 });
 
 export const secretController = {
-  list: async (req: Request, res: Response) => {
-    const secrets = await secretService.getByActor(req.actor);
-
-    return res.status(200).json({
-      secrets: secrets.map((secret) => {
-        return {
-          id: secret.id,
-          label: secret.label,
-          updatedAt: secret.modified_on,
-        };
-      }),
-    });
-  },
-
   create: async (req: Request, res: Response) => {
-    const { label, value, actor } = createNewSecretSchema.parse({
+    const data = CreateNewSecretSchema.parse({
       ...req.body,
       actor: req.actor,
     });
 
-    const result = await secretService.createNew({ label, value }, actor);
+    const result = await secretService.createNew(data);
 
     return res.status(201).json({
       id: result.id,

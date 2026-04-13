@@ -32,7 +32,7 @@ export const SecretDataMapSchema = z.object({
 export const StartNodeConfigurationSchema = z.object({
   inputDataMap: z.array(StartNodeDataMapSchema),
   fetchables: z.array(FetchableSchema),
-  secretDataMap: z.array(SecretDataMapSchema),
+  secretDataMap: z.array(SecretDataMapSchema).default([]),
 });
 
 export const EndNodeConfigurationSchema = z.object({

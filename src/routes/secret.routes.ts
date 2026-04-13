@@ -4,5 +4,6 @@ import { secretController } from "../controllers/secret.controller.js";
 
 export const secretRouter = Router();
 
-secretRouter.get("/", authenticateRequest, secretController.list);
-secretRouter.post("/", authenticateRequest, secretController.create);
+secretRouter.use(authenticateRequest);
+
+secretRouter.post("/", secretController.create);
