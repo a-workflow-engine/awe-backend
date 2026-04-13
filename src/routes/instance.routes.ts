@@ -14,6 +14,7 @@ instanceRouter.get(
   "/:instanceId/executions",
   instanceController.getExecutionLogs,
 );
+instanceRouter.get("/:instanceId/constants", instanceController.getRetryConstants);
 instanceRouter.post(
   "/:instanceId/resume",
   instanceController.resume,

@@ -1,7 +1,7 @@
 import { BaseExecutor } from "./BaseExecutor.js";
 import { DataIntegrityError } from "../../errors/DataIntegrity.js";
 import { FeelDataType, NodeTypes } from "../../types/enums.js";
-import type { Context, ExecutorResult } from "../../types/engine.js";
+import type { EvaluatedContext, ExecutorResult } from "../../types/engine.js";
 import { contextUtils } from "../../utils/context.utils.js";
 import { httpService } from "../../services/http.service.js";
 import { isValidFeelType } from "../../utils/feel.utils.js";
@@ -46,7 +46,7 @@ export class ServiceNodeExecutor extends BaseExecutor<
     current[lastKey] = value;
   }
 
-  async execute(evaluatedContext: Context): Promise<ExecutorResult> {
+  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
     const url = contextUtils.getFeelEvaluatedValue(
       this.configuration.urlExpression,
       evaluatedContext,
@@ -63,20 +63,20 @@ export class ServiceNodeExecutor extends BaseExecutor<
     }
 
     let requestBody: Record<string, unknown> = {};
-    this.configuration.body?.forEach((dataMap) => {
+    for (const dataMap of this.configuration.body ?? []) {
       const value = contextUtils.getFeelEvaluatedValue(
         dataMap.valueExpression,
         evaluatedContext,
       );
       this.setByJsonPath(requestBody, dataMap.jsonPath, value);
-    });
+    }
 
     const response = await httpService.request(this.configuration.method, url, {
       headers,
       ...(this.configuration.body !== undefined ? { body: requestBody } : {}),
     });
 
-    for (const dataMap of this.configuration.responseMap) {
+    for (const dataMap of this.configuration.responseMap ?? []) {
       const value = contextUtils.getByJsonPath(response.data, dataMap.jsonPath);
       if (value === undefined) {
         return this.getFailedResult(

@@ -10,10 +10,9 @@ import { db } from "../database.js";
 import { LogEventTypes, NodeTypes, TaskStatuses } from "../types/enums.js";
 import { queueService } from "./queue.service.js";
 import { userTaskService } from "./userTaskExecution.service.js";
-import type { InputVariables } from "../types/engine.js";
+import type { Context } from "../types/engine.js";
 import { eventLogService } from "./eventLog.service.js";
 import { converterUtils } from "../utils/converter.utils.js";
-import { contextUtils } from "../utils/context.utils.js";
 import { getLogger } from "../logger.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
@@ -21,6 +20,58 @@ import { EngineError } from "../errors/EngineError.js";
 import { taskExecutionService } from "./taskExecution.service.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import { convertToMilliseconds } from "../utils/converter.utils.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { ContextSchema } from "../schemas/context.schema.js";
+
+const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
+const SECRET_REFERENCE_REGEX = /\bsecret\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
+
+function extractReferences(
+  expression: string,
+  regex: RegExp,
+): string[] {
+  const refs = new Set<string>();
+
+  for (const match of expression.matchAll(regex)) {
+    if (match[1]) {
+      refs.add(match[1]);
+    }
+  }
+
+  return [...refs];
+}
+
+function getReferencedVariables(urlExpression: string, headers: Record<string, string>): string[] {
+  const refs = new Set<string>();
+
+  for (const ref of extractReferences(urlExpression, CONTEXT_REFERENCE_REGEX)) {
+    refs.add(ref);
+  }
+
+  for (const value of Object.values(headers)) {
+    for (const ref of extractReferences(value, CONTEXT_REFERENCE_REGEX)) {
+      refs.add(ref);
+    }
+  }
+
+  return [...refs];
+}
+
+function getReferencedSecrets(urlExpression: string, headers: Record<string, string>): string[] {
+  const refs = new Set<string>();
+
+  for (const ref of extractReferences(urlExpression, SECRET_REFERENCE_REGEX)) {
+    refs.add(ref);
+  }
+
+  for (const value of Object.values(headers)) {
+    for (const ref of extractReferences(value, SECRET_REFERENCE_REGEX)) {
+      refs.add(ref);
+    }
+  }
+
+  return [...refs];
+}
 
 const taskStatusToEventMap: Record<TaskStatus, InstanceEventType> = {
   in_progress: LogEventTypes.RESUMED,
@@ -80,6 +131,7 @@ async function createExecution(
   transaction: Transaction<DB>,
 ) {
   const nodeSchema = converterUtils.parseOrThrow(NodeSchema, node);
+
   const attempts = {
     type: "fixed",
     delay: 1000,
@@ -95,7 +147,10 @@ async function createExecution(
       nodeSchema.configuration.backoff.unit,
     );
     attempts.type = nodeSchema.configuration.backoff.type;
-    attempts.max = Math.max(1, nodeSchema.configuration.maxAttempts - previousAttemptCount);
+    attempts.max = Math.max(
+      1,
+      nodeSchema.configuration.maxAttempts - previousAttemptCount,
+    );
   }
 
   if (node.type !== NodeTypes.USER) {
@@ -336,25 +391,120 @@ export const taskService = {
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel) => {
-    let instanceContext: InputVariables;
-
     if (node.type === NodeTypes.START) {
-      instanceContext = {
+      return {
         constants: converterUtils.jsonValueToObject(instance.input_variables),
         fetchables: {},
         urls: {},
+        secrets: {},
       };
-    } else {
-      instanceContext = converterUtils.jsonValueToContextVariables(
-        instance.current_variables,
-      );
     }
+
+    const instanceContext: Context = converterUtils.parseOrThrow(
+      ContextSchema,
+      instance.current_variables,
+    );
 
     const nodeInputSchema = converterUtils.jsonValueToNodeInputSchema(
       node.input_schema,
     );
 
-    return contextUtils.getTaskContext(instanceContext, nodeInputSchema);
+    const taskContext: Context = {
+      constants: {},
+      fetchables: {},
+      urls: {},
+      secrets: {},
+    };
+
+    const addFetchableDependencies = (fetchableName: string): void => {
+      const fetchable = instanceContext.fetchables[fetchableName];
+      if (!fetchable) {
+        throw new EngineError(
+          `Required variable ${fetchableName} does not exists in context`,
+        );
+      }
+
+      const urlSettings = instanceContext.urls[fetchable.urlId];
+      if (!urlSettings) {
+        throw new DataIntegrityError(
+          `Context does not have referenced url of id=${fetchable.urlId} `,
+        );
+      }
+
+      taskContext.fetchables[fetchableName] = fetchable;
+      taskContext.urls[fetchable.urlId] = urlSettings;
+
+      for (const ref of getReferencedVariables(
+        urlSettings.urlExpression,
+        urlSettings.headers,
+      )) {
+        if (ref in taskContext.constants || ref in taskContext.fetchables) {
+          continue;
+        }
+
+        if (ref in instanceContext.constants) {
+          taskContext.constants[ref] = instanceContext.constants[ref];
+          continue;
+        }
+
+        if (instanceContext.fetchables[ref]) {
+          addFetchableDependencies(ref);
+          continue;
+        }
+
+        throw new EngineError(
+          `Required variable ${ref} does not exists in context`,
+        );
+      }
+
+      for (const ref of getReferencedSecrets(
+        urlSettings.urlExpression,
+        urlSettings.headers,
+      )) {
+        if (ref in taskContext.secrets) {
+          continue;
+        }
+
+        const secretId = instanceContext.secrets[ref];
+        if (!secretId) {
+          throw new EngineError(
+            `Required secret ${ref} does not exists in context`,
+          );
+        }
+
+        taskContext.secrets[ref] = secretId;
+      }
+    };
+
+    nodeInputSchema.variableNames.forEach((variableName) => {
+      if (variableName in instanceContext.constants) {
+        taskContext.constants[variableName] =
+          instanceContext.constants[variableName];
+        return;
+      }
+
+      if (instanceContext.fetchables[variableName]) {
+        addFetchableDependencies(variableName);
+        return;
+      }
+
+      throw new EngineError(
+        `Required variable ${variableName} does not exists in context`,
+      );
+    });
+
+    for (const secretName of nodeInputSchema.secretNames ?? []) {
+      const secretId = instanceContext.secrets[secretName];
+      if (!secretId) {
+        throw new EngineError(
+          `Required secret ${secretName} does not exists in context`,
+        );
+      }
+
+      taskContext.secrets[secretName] = secretId;
+    }
+
+    return taskContext;
   },
 
   complete: async (

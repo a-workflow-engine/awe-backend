@@ -1,12 +1,74 @@
-import type { InputVariables, Context } from "../types/engine.js";
+import type { Context, EvaluatedContext } from "../types/engine.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { evaluate } from "@bpmn-io/feelin";
-import type { NodeInputSchema } from "../types/workflow.js";
+import type { Warning } from "@bpmn-io/feelin";
 import { EngineError } from "../errors/EngineError.js";
 import { JSONPath } from "jsonpath-plus";
 import { FeelDataType } from "../types/enums.js";
 import { isValidFeelType, type FeelDataTypeMap } from "./feel.utils.js";
 import { httpService } from "../services/http.service.js";
+import { secretService } from "../services/secrets/secret.service.js";
+
+const EXPECTED_RUNTIME_WARNINGS = new Set([
+  "NO_VARIABLE_FOUND",
+  "NO_CONTEXT_ENTRY_FOUND",
+  "NO_PROPERTY_FOUND",
+  "INVALID_TYPE",
+  "FUNCTION_INVOCATION_FAILURE",
+]);
+
+const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
+const SECRET_REFERENCE_REGEX = /\bsecret\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
+
+function extractReferences(expression: string, regex: RegExp): string[] {
+  const refs = new Set<string>();
+
+  for (const match of expression.matchAll(regex)) {
+    if (match[1]) {
+      refs.add(match[1]);
+    }
+  }
+
+  return [...refs];
+}
+
+function getReferencedVariables(
+  urlExpression: string,
+  headers: Record<string, string>,
+): string[] {
+  const refs = new Set<string>();
+
+  for (const ref of extractReferences(urlExpression, CONTEXT_REFERENCE_REGEX)) {
+    refs.add(ref);
+  }
+
+  for (const value of Object.values(headers)) {
+    for (const ref of extractReferences(value, CONTEXT_REFERENCE_REGEX)) {
+      refs.add(ref);
+    }
+  }
+
+  return [...refs];
+}
+
+function getReferencedSecrets(
+  urlExpression: string,
+  headers: Record<string, string>,
+): string[] {
+  const refs = new Set<string>();
+
+  for (const ref of extractReferences(urlExpression, SECRET_REFERENCE_REGEX)) {
+    refs.add(ref);
+  }
+
+  for (const value of Object.values(headers)) {
+    for (const ref of extractReferences(value, SECRET_REFERENCE_REGEX)) {
+      refs.add(ref);
+    }
+  }
+
+  return [...refs];
+}
 
 export const contextUtils = {
   getByJsonPath(data: any, path: string): unknown {
@@ -23,72 +85,33 @@ export const contextUtils = {
     }
   },
 
-  async evaluateContext(contextVariables: InputVariables): Promise<Context> {
-    const { constants, fetchables, urls } = contextVariables;
+  async evaluateContext(contextVariables: Context): Promise<EvaluatedContext> {
+    const { constants, fetchables, urls, secrets } = contextVariables;
 
-    const returnContext: Record<string, unknown> = { ...constants };
-
-    const fetchedResponses: Record<string, unknown> = {};
-    const entries = Object.entries(fetchables);
-    if (entries.length === 0) {
-      return { context: returnContext };
-    }
-
-    const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
-
-    type FetchableMeta = {
-      urlId: string;
-      jsonPath: string;
-      dataType: FeelDataType;
-      deps: Set<string>;
+    const evaluatedContext: EvaluatedContext = {
+      context: { ...constants },
+      secret: {},
     };
 
-    const fetchableMeta: Record<string, FetchableMeta> = {};
+    const fetchedSecrets = await secretService.getByIds(Object.values(secrets));
 
-    for (const [varName, { urlId, jsonPath, dataType }] of entries) {
-      const urlSettings = urls[urlId];
-      if (!urlSettings) {
-        throw new DataIntegrityError(
-          `Context does not have referenced url of id=${urlId} `,
-        );
+    for (const [variableName, secretId] of Object.entries(secrets)) {
+      const value = fetchedSecrets[secretId];
+      if (!value) {
+        throw new EngineError(`Secret ${variableName} could not evalauted`);
       }
 
-      const deps = new Set<string>();
-      const sources: string[] = [
-        urlSettings.urlExpression,
-        ...Object.values(urlSettings.headers ?? {}),
-      ];
-
-      for (const source of sources) {
-        if (!source) continue;
-        for (const match of source.matchAll(CONTEXT_REFERENCE_REGEX)) {
-          if (match[1]) {
-            deps.add(match[1]);
-          }
-        }
-      }
-
-      fetchableMeta[varName] = { urlId, jsonPath, dataType, deps };
+      evaluatedContext.secret[variableName] = value;
     }
 
-    const unresolved = new Set(Object.keys(fetchableMeta));
+    const fetchedResponses: Record<string, unknown> = {};
+    const unresolvedFetchables = new Set(Object.entries(fetchables));
 
-    while (unresolved.size > 0) {
+    while (unresolvedFetchables.size > 0) {
       let progress = false;
 
-      for (const varName of Array.from(unresolved)) {
-        const meta = fetchableMeta[varName];
-        if (!meta) continue;
-
-        const { urlId, jsonPath, dataType, deps } = meta;
-
-        // A fetchable can be resolved only when all of its
-        // referenced context variables are already available.
-        const canResolve = Array.from(deps).every(
-          (dep) => dep in returnContext,
-        );
-        if (!canResolve) continue;
-
+      for (const entry of Array.from(unresolvedFetchables)) {
+        const [varName, { urlId, jsonPath, dataType }] = entry;
         const urlSettings = urls[urlId];
         if (!urlSettings) {
           throw new DataIntegrityError(
@@ -96,22 +119,38 @@ export const contextUtils = {
           );
         }
 
+        const requiredVariables = getReferencedVariables(
+          urlSettings.urlExpression,
+          urlSettings.headers,
+        );
+        const requiredSecrets = getReferencedSecrets(
+          urlSettings.urlExpression,
+          urlSettings.headers,
+        );
+
+        const hasVariables = requiredVariables.every(
+          (name) => name in evaluatedContext.context,
+        );
+        const hasSecrets = requiredSecrets.every(
+          (name) => name in evaluatedContext.secret,
+        );
+
+        if (!hasVariables || !hasSecrets) {
+          continue;
+        }
+
         if (!(urlId in fetchedResponses)) {
           const url = contextUtils.getFeelEvaluatedValue(
             urlSettings.urlExpression,
-            {
-              context: returnContext,
-            },
+            evaluatedContext,
             FeelDataType.STRING,
           );
 
           const headers: Record<string, string> = {};
-          for (const [key, value] of Object.entries(urlSettings.headers ?? {})) {
+          for (const [key, value] of Object.entries(urlSettings.headers)) {
             headers[key] = contextUtils.getFeelEvaluatedValue(
               value,
-              {
-                context: returnContext,
-              },
+              evaluatedContext,
               FeelDataType.STRING,
             );
           }
@@ -132,50 +171,60 @@ export const contextUtils = {
           );
         }
 
-        returnContext[varName] = varValue;
-        unresolved.delete(varName);
+        evaluatedContext.context[varName] = varValue;
+        unresolvedFetchables.delete(entry);
         progress = true;
       }
 
       if (!progress) {
-        const problems: string[] = [];
+        const problems = Array.from(unresolvedFetchables).map(
+          ([varName, { urlId }]) => {
+            const urlSettings = urls[urlId];
+            const missingVariables = urlSettings
+              ? getReferencedVariables(urlSettings.urlExpression, urlSettings.headers).filter(
+                  (name) => !(name in evaluatedContext.context),
+                )
+              : [];
+            const missingSecrets = urlSettings
+              ? getReferencedSecrets(urlSettings.urlExpression, urlSettings.headers).filter(
+                  (name) => !(name in evaluatedContext.secret),
+                )
+              : [];
 
-        for (const varName of unresolved) {
-          const meta = fetchableMeta[varName];
-          if (!meta) continue;
+            const missingParts = [
+              ...(missingVariables.length > 0
+                ? [`missing context variables: ${missingVariables.join(", ")}`]
+                : []),
+              ...(missingSecrets.length > 0
+                ? [`missing secrets: ${missingSecrets.join(", ")}`]
+                : []),
+            ];
 
-          const missingDeps = Array.from(meta.deps).filter(
-            (dep) => !(dep in returnContext),
-          );
-
-          if (missingDeps.length > 0) {
-            problems.push(
-              `${varName} depends on missing context variable(s): ${missingDeps.join(", ")}`,
-            );
-          } else {
-            problems.push(`${varName} has unresolved dependencies`);
-          }
-        }
+            return `${varName}${missingParts.length > 0 ? ` (${missingParts.join("; ")})` : ""}`;
+          },
+        );
 
         throw new DataIntegrityError(
-          `Unable to resolve fetchable context variables due to circular or missing dependencies: ${problems.join(
-            "; ",
-          )}`,
+          `Unable to resolve fetchable context variables due to circular or missing dependencies: ${problems.join("; ")}`,
         );
       }
     }
 
-    return { context: returnContext };
+    return evaluatedContext;
   },
 
   getFeelEvaluatedValue<T extends FeelDataType>(
     expression: string,
-    context: Context,
+    context: EvaluatedContext,
     dataType?: T,
   ): FeelDataTypeMap[T] {
     const result = evaluate(expression, context);
 
-    if (!result || result.warnings.length > 0) {
+    const unexpectedWarnings = (result?.warnings ?? []).filter(
+      (warning: Warning) => !EXPECTED_RUNTIME_WARNINGS.has(warning.type),
+    );
+
+    if (!result || unexpectedWarnings.length > 0) {
       throw new DataIntegrityError(`Invalid FEEL expression ${expression}`);
     }
 
@@ -186,88 +235,5 @@ export const contextUtils = {
     }
 
     return result.value as FeelDataTypeMap[T];
-  },
-
-  getTaskContext(
-    instanceContext: InputVariables,
-    inputSchema: NodeInputSchema,
-  ): InputVariables {
-    const { constants, fetchables, urls } = instanceContext;
-    const taskContext: InputVariables = {
-      constants: {},
-      fetchables: {},
-      urls: {},
-    };
-
-    inputSchema.variableNames.forEach((variableName) => {
-      if (variableName in constants) {
-        taskContext.constants[variableName] = constants[variableName];
-        return;
-      }
-
-      const fetchable = fetchables[variableName];
-
-      if (fetchable === undefined) {
-        throw new EngineError(
-          `Required variable ${variableName} does not exists in context`,
-        );
-      }
-
-      taskContext.fetchables[variableName] = fetchable;
-
-      const urlSettings = urls[fetchable.urlId];
-      if (!urlSettings) {
-        throw new DataIntegrityError(
-          `Context does not have referenced url of id=${fetchable.urlId} `,
-        );
-      }
-
-      taskContext.urls[fetchable.urlId] = urlSettings;
-    });
-
-    const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
-
-    const referencedVariables = new Set<string>();
-
-    Object.values(taskContext.urls).forEach((urlSettings) => {
-      const sources: string[] = [
-        urlSettings.urlExpression,
-        ...Object.values(urlSettings.headers ?? {}),
-      ];
-
-      for (const source of sources) {
-        if (!source) continue;
-        for (const match of source.matchAll(CONTEXT_REFERENCE_REGEX)) {
-          if (match[1]) {
-            referencedVariables.add(match[1]);
-          }
-        }
-      }
-    });
-
-    referencedVariables.forEach((variableName) => {
-      if (
-        variableName in taskContext.constants ||
-        variableName in taskContext.fetchables
-      ) {
-        return;
-      }
-
-      if (variableName in constants) {
-        taskContext.constants[variableName] = constants[variableName];
-        return;
-      }
-
-      const fetchable = fetchables[variableName];
-      if (fetchable) {
-        taskContext.fetchables[variableName] = fetchable;
-        const urlSettings = urls[fetchable.urlId];
-        if (urlSettings) {
-          taskContext.urls[fetchable.urlId] = urlSettings;
-        }
-      }
-    });
-
-    return taskContext;
   },
 };

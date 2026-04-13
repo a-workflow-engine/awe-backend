@@ -10,7 +10,7 @@ import {
   FeelDataType,
 } from "../types/enums.js";
 import { edgeService } from "./edge.services.js";
-import type { InputVariables, ExecutorResult } from "../types/engine.js";
+import type { Context, ExecutorResult } from "../types/engine.js";
 import { validateUserTaskInput } from "../utils/inputValidator.utils.js";
 import { userTaskExecutionRepository } from "../repositories/userTaskExecution.repository.js";
 import type {
@@ -29,12 +29,13 @@ import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
 import { db } from "../database.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
+import { ContextSchema } from "../schemas/context.schema.js";
 
 export const userTaskService = {
   create: async (
     node: UserNodeModel,
     taskExecution: TaskExecutionModel,
-    executionContext: InputVariables,
+    executionContext: Context,
     transaction: Transaction<DB>,
   ): Promise<UserTaskExecutionModel> => {
     const configObject = converterUtils.jsonValueToObject(node.configuration);
@@ -114,7 +115,8 @@ export const userTaskService = {
 
     const { userTaskExecution, taskExecution, node, workflow } = result;
 
-    const nodeContext = converterUtils.jsonValueToContextVariables(
+    const nodeContext = converterUtils.parseOrThrow(
+      ContextSchema,
       taskExecution.input_variables,
     );
     const evaluatedContext = await contextUtils.evaluateContext(nodeContext);
@@ -201,7 +203,8 @@ export const userTaskService = {
       node.configuration,
     );
 
-    const executionContext = converterUtils.jsonValueToContextVariables(
+    const executionContext = converterUtils.parseOrThrow(
+      ContextSchema,
       taskExecution.input_variables,
     );
 
