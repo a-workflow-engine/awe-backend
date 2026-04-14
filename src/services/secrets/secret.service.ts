@@ -23,6 +23,34 @@ function getProviderClass(providerType: string) {
   return ProviderClass;
 }
 
+function normalizeSecretValue(value: unknown, secretId: string): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    throw new EngineError(`Secret ${secretId} resolved to an empty value`);
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    if (typeof record.secretValue === "string") {
+      return record.secretValue;
+    }
+
+    if (typeof record.value === "string") {
+      return record.value;
+    }
+
+    if (typeof record.data === "string") {
+      return record.data;
+    }
+  }
+
+  return String(value);
+}
+
 export const secretService = {
   createNew: async (data: CreateNewSecretSchemaType) => {
     const environment = await environmentService.getByActorAndType(
@@ -78,7 +106,7 @@ export const secretService = {
             `Secret key "${ref.secret_key}" not returned by provider`,
           );
         }
-        secrets[ref.id] = value;
+        secrets[ref.id] = normalizeSecretValue(value, ref.id);
       });
     }
 
@@ -97,5 +125,26 @@ export const secretService = {
       providerId,
       actor.id,
     );
+  },
+
+  delete: async (
+    secretId: string,
+    actor: z.infer<typeof ActorSchema>,
+  ): Promise<boolean> => {
+    // Verify the secret belongs to this actor
+    const secret = await secretReferenceRepository.findById(secretId);
+    if (!secret) {
+      throw new NotFoundError("Secret");
+    }
+
+    // Verify that the actor has access to this secret
+    const userSecrets = await secretReferenceRepository.findByActor(actor.id);
+    if (!userSecrets.some((s) => s.id === secretId)) {
+      throw new InvalidOperationError(
+        "You do not have permission to delete this secret",
+      );
+    }
+
+    return await secretReferenceRepository.deleteById(secretId);
   },
 };

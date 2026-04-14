@@ -152,4 +152,19 @@ export const secretReferenceRepository = {
       .where("environment.is_deleted", "=", false)
       .execute();
   },
+
+  deleteById: async (
+    id: string,
+    transaction?: Transaction<DB>,
+  ): Promise<boolean> => {
+    try {
+      const result = await (transaction ?? db)
+        .deleteFrom("secret_reference")
+        .where("id", "=", id)
+        .executeTakeFirst();
+      return (result.numDeletedRows ?? 0n) > 0n;
+    } catch (err) {
+      throw new RepositoryError("Delete secret reference failed", err);
+    }
+  },
 };

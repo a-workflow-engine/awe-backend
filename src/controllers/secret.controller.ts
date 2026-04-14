@@ -61,4 +61,19 @@ export const secretController = {
       secrets: result.map(mapSecret),
     });
   },
-};
+    delete: async (req: Request, res: Response) => {
+      const secretId = req.params.secretId as string;
+      const deleted = await secretService.delete(secretId, req.actor!);
+    
+      if (!deleted) {
+        return res.status(404).json({
+          error: "Secret not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Secret deleted successfully",
+      });
+    },
+   };
