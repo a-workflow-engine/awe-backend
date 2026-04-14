@@ -90,6 +90,8 @@ function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
     expressions: [
       config.urlExpression,
       ...(config.body?.map((b) => b.valueExpression) ?? []),
+
+      ...(config.headers?.map((h) => h.valueExpression) ?? []),
     ],
     outputVariables: config.responseMap.map((r) => r.contextVariableName),
     includeSecrets: true,
