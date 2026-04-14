@@ -20,6 +20,36 @@ const EXPECTED_RUNTIME_WARNINGS = new Set([
 const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
 const SECRET_REFERENCE_REGEX = /\bsecret\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
 
+function normalizeSecretValue(value: unknown, secretName: string): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    throw new EngineError(`Secret ${secretName} resolved to an empty value`);
+  }
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    if (typeof record.secretValue === "string") {
+      return record.secretValue;
+    }
+
+    if (typeof record.value === "string") {
+      return record.value;
+    }
+
+    if (typeof record.data === "string") {
+      return record.data;
+    }
+
+    return JSON.stringify(record);
+  }
+
+  return String(value);
+}
+
 function extractReferences(expression: string, regex: RegExp): string[] {
   const refs = new Set<string>();
 
@@ -101,7 +131,10 @@ export const contextUtils = {
         throw new EngineError(`Secret ${variableName} could not evalauted`);
       }
 
-      evaluatedContext.secret[variableName] = value;
+      evaluatedContext.secret[variableName] = normalizeSecretValue(
+        value,
+        variableName,
+      );
     }
 
     const fetchedResponses: Record<string, unknown> = {};
@@ -226,6 +259,17 @@ export const contextUtils = {
 
     if (!result || unexpectedWarnings.length > 0) {
       throw new DataIntegrityError(`Invalid FEEL expression ${expression}`);
+    }
+
+    // For string expressions, be robust and always coerce the result to a
+    // primitive string instead of failing on non-primitive values (e.g.
+    // boxed String objects or provider-specific wrappers). This avoids
+    // runtime errors like "expected string, got object" when the value is
+    // still safely representable as a string.
+    if (dataType === FeelDataType.STRING) {
+      if (typeof result.value !== "string") {
+        return String(result.value) as FeelDataTypeMap[T];
+      }
     }
 
     if (dataType && !isValidFeelType(result.value, dataType)) {
