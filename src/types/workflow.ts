@@ -5,6 +5,7 @@ import {
   UserNodeConfigurationSchema,
   ServiceNodeConfigurationSchema,
   ScriptNodeConfigurationSchema,
+  EmailNodeConfigurationSchema,
   DecisionNodeConfigurationSchema,
   NodeSchema,
   EdgeSchema,
@@ -33,6 +34,10 @@ export type ScriptNodeConfiguration = z.infer<
   typeof ScriptNodeConfigurationSchema
 >;
 
+export type EmailNodeConfiguration = z.infer<
+  typeof EmailNodeConfigurationSchema
+>;
+
 export type DecisionNodeConfiguration = z.infer<
   typeof DecisionNodeConfigurationSchema
 >;
@@ -59,6 +64,7 @@ export type Fetchable = z.infer<typeof FetchableSchema>;
 export const NodeConfigurationSchemaMap = {
   [NodeTypes.START]: StartNodeConfigurationSchema,
   [NodeTypes.SERVICE]: ServiceNodeConfigurationSchema,
+  [NodeTypes.EMAIL]: EmailNodeConfigurationSchema,
   [NodeTypes.SCRIPT]: ScriptNodeConfigurationSchema,
   [NodeTypes.USER]: UserNodeConfigurationSchema,
   [NodeTypes.DECISION]: DecisionNodeConfigurationSchema,

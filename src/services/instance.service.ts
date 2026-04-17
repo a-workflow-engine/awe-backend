@@ -11,6 +11,7 @@ import {
   LogEventTypes,
   InstanceStatuses,
   TaskStatuses,
+  NodeTypes,
 } from "../types/enums.js";
 import { db } from "../database.js";
 import { converterUtils } from "../utils/converter.utils.js";
@@ -32,6 +33,7 @@ import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { ContextSchema } from "../schemas/context.schema.js";
 import type { Context } from "../types/engine.js";
+import { taskExecutionService } from "./taskExecution.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -136,6 +138,22 @@ export const instanceService = {
     );
   },
 
+  assertAccessible: async (
+    instanceId: string,
+    environmentIds: string[],
+  ): Promise<InstanceModel> => {
+    const instance = await instanceRepository.findByIdAndEnvironmentIds(
+      instanceId,
+      environmentIds,
+    );
+
+    if (!instance) {
+      throw new NotFoundError("Instance");
+    }
+
+    return instance;
+  },
+
   get: async (instanceId: string, environmentIds: string[]) => {
     const instance = await instanceRepository.findByIdAndEnvironmentIds(
       instanceId,
@@ -160,7 +178,14 @@ export const instanceService = {
 
     const task = await taskRepository.findLatestByInstanceId(instance.id);
     if (!task) {
-      return { instance, workflowVersion, node: null, task: null };
+      return {
+        instance,
+        workflowVersion,
+        node: null,
+        task: null,
+        latestTaskExecution: null,
+        latestUserTaskExecution: null,
+      };
     }
 
     const node = await nodeService.getById(task.node_id);
@@ -168,7 +193,37 @@ export const instanceService = {
       throw new DataIntegrityError(`Node does not exist id = ${task.node_id}`);
     }
 
-    return { instance, workflow_name, workflowVersion, node, task };
+    const latestTaskExecution = await taskExecutionService.getLatestByTaskId(
+      task.id,
+    );
+    if (!latestTaskExecution) {
+      return {
+        instance,
+        workflowVersion,
+        node: null,
+        task: null,
+        latestTaskExecution: null,
+        latestUserTaskExecution: null,
+      };
+    }
+
+    let latestUserTaskExecution;
+    if (node.type === NodeTypes.USER) {
+      latestUserTaskExecution =
+        await taskExecutionService.getLatestUserTaskExecutionByTaskId(
+          latestTaskExecution.id,
+        );
+    }
+
+    return {
+      instance,
+      workflow_name,
+      workflowVersion,
+      node,
+      task,
+      latestTaskExecution,
+      latestUserTaskExecution,
+    };
   },
 
   getLockedInProgressOrPausedRelations: async (

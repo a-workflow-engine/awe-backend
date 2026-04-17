@@ -8,6 +8,7 @@ import { EndNodeExecutor } from "./EndNodeExecutor.js";
 import { ScriptNodeExecutor } from "./ScriptNodeExecutor.js";
 import { ServiceNodeExecutor } from "./ServiceNodeExecuter.js";
 import { StartNodeExecutor } from "./StartNodeExecutor.js";
+import { EmailNodeExecutor } from "./EmailNodeExecutor.js";
 
 export type ExecutorConstructor = new (
   node: NodeModel,
@@ -22,6 +23,7 @@ export const executorMap: Record<
   [NodeTypes.START]: StartNodeExecutor,
   [NodeTypes.SERVICE]: ServiceNodeExecutor,
   [NodeTypes.SCRIPT]: ScriptNodeExecutor,
+  [NodeTypes.EMAIL]: EmailNodeExecutor,
   [NodeTypes.DECISION]: DecisionNodeExecutor,
   [NodeTypes.END]: EndNodeExecutor,
 };

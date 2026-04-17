@@ -62,6 +62,10 @@ export type ServiceNodeModel = BaseNodeModel & {
   type: typeof NodeTypes.SERVICE;
 };
 
+export type EmailNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.EMAIL;
+};
+
 export type UserNodeModel = BaseNodeModel & {
   type: typeof NodeTypes.USER;
 };
@@ -72,6 +76,7 @@ export type NodeModel =
   | EndNodeModel
   | ScriptNodeModel
   | ServiceNodeModel
+  | EmailNodeModel
   | UserNodeModel;
 
 export type EdgeModel = Selectable<Edge>;
