@@ -8,7 +8,6 @@ import type { TaskExecutionModel } from "../types/models.js";
 import { converterUtils } from "../utils/converter.utils.js";
 import { eventLogService } from "./eventLog.service.js";
 import type { DB } from "../types/database.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 type ExecutionNodeStatus =
   | "completed"
@@ -173,10 +172,7 @@ export const taskExecutionService = {
       };
     }
 
-    const { orderByNodeId, levelByNodeId } = computeNodeOrder(
-      nodes,
-      connections,
-    );
+    const { orderByNodeId } = computeNodeOrder(nodes, connections);
 
     const executionByNodeId = new Map<string, typeof executions>();
     for (const execution of executions) {

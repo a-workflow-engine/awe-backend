@@ -166,7 +166,7 @@ export const engineUtils = {
       transaction: Transaction<DB>,
     ) => Promise<T>,
   ): Promise<T> => {
-    const { instanceId, taskId, nodeId } = jobData;
+    const { instanceId, nodeId } = jobData;
     getLogger().info({ job: jobData }, "Locking job models");
 
     return db.transaction().execute(async (transaction) => {

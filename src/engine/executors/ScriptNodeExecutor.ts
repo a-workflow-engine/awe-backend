@@ -1,6 +1,6 @@
 import { Executor } from "./Executor.js";
 import { contextUtils } from "../../utils/context.utils.js";
-import { NodeTypes, TaskStatuses } from "../../types/enums.js";
+import { NodeTypes } from "../../types/enums.js";
 import type {
   ExecutorResult,
   EvaluatedContext,

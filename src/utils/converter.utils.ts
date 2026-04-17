@@ -1,7 +1,6 @@
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import type { JsonValue } from "../types/database.js";
 import { TimeUnit } from "../types/enums.js";
-import type { NodeModel } from "../types/models.js";
 import type { NodeInputSchema } from "../types/workflow.js";
 import { z } from "zod";
 

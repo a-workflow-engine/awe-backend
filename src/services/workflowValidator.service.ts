@@ -1,6 +1,4 @@
 import { NodeTypes } from "../types/enums.js";
-import { v4 as uuidv4 } from "uuid";
-import { nodeSchemaService } from "./nodeSchema.service.js";
 import type { EdgeModel, NodeModel } from "../types/models.js";
 import {
   DecisionNodeConfigurationSchema,
@@ -18,7 +16,6 @@ import {
 } from "../utils/feel.utils.js";
 import { graphUtils } from "../utils/graph.utils.js";
 import { parser as pythonParser } from "@lezer/python";
-import { JSONPath } from "jsonpath-plus";
 
 export type ValidationError = {
   code: number;
@@ -64,32 +61,11 @@ export enum ValidationErrorCode {
 
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
 
-const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
-
 const JSONPATH_REGEX =
   /^\$(?:\.(?:[a-zA-Z_][a-zA-Z0-9_-]*|\*)|\[(?:\d+|\*|'[^']+'|"[^"]+")\]|\.\.)*$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function extractContextReferences(expression: string): string[] {
-  const refs = new Set<string>();
-  for (const match of expression.matchAll(CONTEXT_REFERENCE_REGEX)) {
-    if (match[1]) refs.add(match[1]);
-  }
-  return [...refs];
-}
-
-function getNodeInputVariables(node: NodeModel): Set<string> {
-  if (!node.input_schema) {
-    return new Set<string>();
-  }
-
-  const parsedSchema = converterUtils.jsonValueToNodeInputSchema(
-    node.input_schema,
-  );
-  return new Set(parsedSchema.variableNames);
 }
 
 function getNodeOutputVariables(node: NodeModel): Set<string> {
@@ -282,6 +258,7 @@ function validateExpression(
   validator: ExpressionValidator = validateFeelExpression,
   inputVariables?: Set<string>,
 ): void {
+  inputVariables;
   if (!expression?.trim()) return;
 
   const result = validator(expression);
@@ -293,7 +270,6 @@ function validateExpression(
     });
     return;
   }
-
 }
 
 function validateRequired(
@@ -426,7 +402,7 @@ function validateStartNode(
       assignedOutputs.add(entry.contextVariableName.trim());
 
       // if (!entry.fetchableId) {
-        startNodeInputVariables.add(entry.contextVariableName.trim());
+      startNodeInputVariables.add(entry.contextVariableName.trim());
       // }
     }
   });

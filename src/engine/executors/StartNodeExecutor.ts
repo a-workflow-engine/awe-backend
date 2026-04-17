@@ -39,7 +39,7 @@ export class StartNodeExecutor extends Executor<typeof NodeTypes.START> {
     };
   }
 
-  async execute(evaluatedContext: EvaluatedContext): Promise<ExecutorResult> {
+  async execute(_: EvaluatedContext): Promise<ExecutorResult> {
     const inputJson = this.inputVariables.constants;
 
     let constants: Record<string, unknown> = {};

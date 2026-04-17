@@ -2,7 +2,7 @@ import { BullMQQueue } from "../engine/queue/BullMQQueue.js";
 import { ExecutionWorker } from "../engine/queue/ExecutionWorker.js";
 import { redisConnectionOptions } from "../config/redis.js";
 import type { QueueJobData } from "../types/engine.js";
-import type { BackoffSettings, NodeConfiguration } from "../types/workflow.js";
+import type { NodeConfiguration } from "../types/workflow.js";
 import { convertToMilliseconds } from "../utils/converter.utils.js";
 import { TimeUnit } from "../types/enums.js";
 import type { BackoffOptions } from "bullmq";

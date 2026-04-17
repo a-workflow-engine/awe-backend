@@ -21,7 +21,7 @@ export const requestLogFormatter = pinoHttp({
 
 export function requestLoggerMiddleware(
   req: Request,
-  res: Response,
+  _: Response,
   next: NextFunction,
 ) {
   loggerStorage.run(req.log, next);

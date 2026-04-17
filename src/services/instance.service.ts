@@ -30,7 +30,6 @@ import { getLogger } from "../logger.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
-import { taskExecutionService } from "./taskExecution.service.js";
 import { ContextSchema } from "../schemas/context.schema.js";
 import type { Context } from "../types/engine.js";
 
@@ -137,11 +136,7 @@ export const instanceService = {
     );
   },
 
-  get: async (
-    instanceId: string,
-    actorId: string,
-    environmentIds: string[],
-  ) => {
+  get: async (instanceId: string, environmentIds: string[]) => {
     const instance = await instanceRepository.findByIdAndEnvironmentIds(
       instanceId,
       environmentIds,

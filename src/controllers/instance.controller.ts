@@ -55,8 +55,7 @@ export const instanceController = {
   get: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const { instance, workflow_name, workflowVersion, node, task } =
-      await instanceService.get(instanceId, req.actor.id, req.environmentIds);
-
+      await instanceService.get(instanceId, req.environmentIds);
 
     return res.json({
       id: instance.id,
@@ -99,11 +98,7 @@ export const instanceController = {
   getExecutionLogs: async (req: Request, res: Response) => {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
 
-    await instanceService.get(
-      instanceId,
-      req.actor.id,
-      req.environmentIds,
-    );
+    await instanceService.get(instanceId, req.environmentIds);
 
     const executionLogs =
       await taskExecutionService.getExecutionLogs(instanceId);

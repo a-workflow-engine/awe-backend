@@ -16,7 +16,6 @@ import { userTaskExecutionRepository } from "../repositories/userTaskExecution.r
 import type {
   ActorModel,
   TaskExecutionModel,
-  UserNodeModel,
   UserTaskExecutionModel,
 } from "../types/models.js";
 import { contextUtils } from "../utils/context.utils.js";
@@ -27,11 +26,8 @@ import { taskExecutionService } from "./taskExecution.service.js";
 import { engineUtils } from "../utils/engine.utils.js";
 import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
-import { db } from "../database.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { ContextSchema } from "../schemas/context.schema.js";
 import type { UserNodeConfiguration } from "../types/workflow.js";
-import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 
 export const userTaskService = {
   create: async (params: {
