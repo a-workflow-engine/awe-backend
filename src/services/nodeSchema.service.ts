@@ -7,6 +7,7 @@ import type {
   NodeInputSchema,
   NodeOuputSchema,
   ScriptNodeConfiguration,
+  EmailNodeConfiguration,
   ServiceNodeConfiguration,
   StartNodeConfiguration,
   StartNodeDataMap,
@@ -106,6 +107,25 @@ function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
   });
 }
 
+function getEmailSchema(config: EmailNodeConfiguration): SchemaResult {
+  return buildSchema({
+    expressions: [
+      config.senderExpression,
+      config.authUserExpression,
+      config.authPassExpression,
+      config.subjectExpression,
+      config.bodyExpression,
+      ...config.to.map((recipient) => recipient.valueExpression),
+      ...(config.cc ?? []).map((recipient) => recipient.valueExpression),
+      ...(config.bcc ?? []).map((recipient) => recipient.valueExpression),
+    ],
+    outputVariables: (config.responseMap ?? []).map(
+      (r) => r.contextVariableName,
+    ),
+    includeSecrets: true,
+  });
+}
+
 function getDecisionSchema(config: DecisionNodeConfiguration): SchemaResult {
   return buildSchema({
     expressions: config.rules.map((r) => r.conditionExpression),
@@ -125,6 +145,7 @@ type SchemaGetters = {
 const schemaGetters: SchemaGetters = {
   start: getStartSchema,
   service: getServiceSchema,
+  email: getEmailSchema,
   script: getScriptSchema,
   user: getUserSchema,
   decision: getDecisionSchema,
@@ -154,7 +175,7 @@ export const nodeSchemaService = {
   ): Record<string, NodeInputSchema> => {
     const schemas: Record<string, NodeInputSchema> = {};
 
-    for (const fetchable of fetchables ?? []) {
+    for (const fetchable of fetchables) {
       schemas[fetchable.id] = buildSchema({
         expressions: [
           fetchable.urlExpression,
@@ -189,11 +210,11 @@ export const nodeSchemaService = {
     inputSchema: NodeInputSchema;
     outputSchema: NodeOuputSchema;
   } => {
-    const schemas = (
-      schemaGetters[node.type] as (
-        config: NodeConfiguration<typeof node.type>,
-      ) => SchemaResult
-    )(node.configuration);
+    const schemaBuilder = schemaGetters[node.type] as (
+      config: NodeConfiguration<typeof node.type>,
+    ) => SchemaResult;
+
+    const schemas = schemaBuilder(node.configuration);
 
     const inputSchemas = schemas.inputSchema.variableNames.flatMap(
       (variableName) => {
@@ -205,12 +226,8 @@ export const nodeSchemaService = {
     inputSchemas.push(schemas.inputSchema);
 
     schemas.inputSchema = {
-      variableNames: [
-        ...new Set(inputSchemas.flatMap((s) => s.variableNames)),
-      ],
-      secretNames: [
-        ...new Set(inputSchemas.flatMap((s) => s.secretNames)),
-      ],
+      variableNames: [...new Set(inputSchemas.flatMap((s) => s.variableNames))],
+      secretNames: [...new Set(inputSchemas.flatMap((s) => s.secretNames))],
     };
 
     return schemas;

@@ -1,7 +1,8 @@
-import type { Selectable } from "kysely";
+import type { Selectable, Transaction } from "kysely";
 import type {
   Actor,
   ApiKey,
+  DB,
   Edge,
   Environment,
   Instance,
@@ -20,6 +21,8 @@ import type {
 } from "./database.js";
 import type {} from "./workflow.js";
 import { NodeTypes } from "./enums.js";
+
+export type DbTransaction = Transaction<DB>;
 
 export type ActorModel = Selectable<Actor>;
 
@@ -59,6 +62,10 @@ export type ServiceNodeModel = BaseNodeModel & {
   type: typeof NodeTypes.SERVICE;
 };
 
+export type EmailNodeModel = BaseNodeModel & {
+  type: typeof NodeTypes.EMAIL;
+};
+
 export type UserNodeModel = BaseNodeModel & {
   type: typeof NodeTypes.USER;
 };
@@ -69,6 +76,7 @@ export type NodeModel =
   | EndNodeModel
   | ScriptNodeModel
   | ServiceNodeModel
+  | EmailNodeModel
   | UserNodeModel;
 
 export type EdgeModel = Selectable<Edge>;

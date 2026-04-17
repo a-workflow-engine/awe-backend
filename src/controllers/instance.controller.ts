@@ -63,7 +63,7 @@ export const instanceController = {
       task,
       latestTaskExecution,
       latestUserTaskExecution,
-    } = await instanceService.get(instanceId, req.actor.id, req.environmentIds);
+    } = await instanceService.get(instanceId, req.environmentIds);
 
     return res.json({
       id: instance.id,

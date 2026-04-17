@@ -28,6 +28,7 @@ export const NodeTypes = {
   END: "end",
   SCRIPT: "script",
   SERVICE: "service",
+  EMAIL: "email",
   USER: "user",
 } as const satisfies Record<string, NodeType>;
 
@@ -95,6 +96,11 @@ export enum TimeUnit {
   MILLISECOND = "millisecond",
   SECOND = "second",
   MINUTE = "minute",
+}
+
+export enum BackoffType {
+  FIXED = "fixed",
+  EXPONENTIAL = "exponential",
 }
 
 export const SecretProviderTypes = {

@@ -1,8 +1,13 @@
 import { z } from "zod";
-import { FeelDataType, NodeTypes, TimeUnit } from "../types/enums.js";
+import {
+  BackoffType,
+  FeelDataType,
+  NodeTypes,
+  TimeUnit,
+} from "../types/enums.js";
 import { HttpMethodSchema } from "../types/http.js";
 
-export const FeelDataTypeSchema = z.enum(Object.values(FeelDataType));
+export const FeelDataTypeSchema = z.enum(FeelDataType);
 
 const HttpHeaderSchema = z.object({
   key: z.string(),
@@ -100,8 +105,8 @@ const ServiceResponseSchema = z.object({
   contextVariableName: z.string(),
 });
 
-const BackoffSchema = z.object({
-  type: z.enum(["fixed", "exponential"]),
+export const BackoffSchema = z.object({
+  type: z.enum(BackoffType),
   delay: z.number().positive().optional().default(1000),
   unit: z.enum(TimeUnit).optional().default(TimeUnit.MILLISECOND),
 });
@@ -144,6 +149,26 @@ export const ScriptNodeConfigurationSchema = z.object({
   ),
 });
 
+const EmailRecipientSchema = z.object({
+  valueExpression: z.string(),
+});
+
+export const EmailNodeConfigurationSchema = z.object({
+  provider: z.string().min(1).default("google_smtp"),
+  senderExpression: z.string(),
+  authUserExpression: z.string(),
+  authPassExpression: z.string(),
+  to: z.array(EmailRecipientSchema),
+  cc: z.array(EmailRecipientSchema).optional().default([]),
+  bcc: z.array(EmailRecipientSchema).optional().default([]),
+  subjectExpression: z.string(),
+  bodyExpression: z.string(),
+  maxAttempts: z.number().optional().default(1),
+  backoff: BackoffSchema,
+  failurePolicy: z.enum(["fail", "continue"]).optional().default("fail"),
+  responseMap: z.array(ServiceResponseSchema).optional().default([]),
+});
+
 export const RuleSchema = z.object({
   id: z.string(),
   label: z.string().optional(),
@@ -177,6 +202,10 @@ export const NodeSchema = z
     z.object({
       type: z.literal(NodeTypes.SCRIPT),
       configuration: ScriptNodeConfigurationSchema,
+    }),
+    z.object({
+      type: z.literal(NodeTypes.EMAIL),
+      configuration: EmailNodeConfigurationSchema,
     }),
     z.object({
       type: z.literal(NodeTypes.DECISION),

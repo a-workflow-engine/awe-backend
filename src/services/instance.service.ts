@@ -31,9 +31,9 @@ import { getLogger } from "../logger.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
 import type { LogDetailSchema } from "../types/instanceLog.js";
 import { engineUtils } from "../utils/engine.utils.js";
-import { taskExecutionService } from "./taskExecution.service.js";
 import { ContextSchema } from "../schemas/context.schema.js";
 import type { Context } from "../types/engine.js";
+import { taskExecutionService } from "./taskExecution.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -154,11 +154,7 @@ export const instanceService = {
     return instance;
   },
 
-  get: async (
-    instanceId: string,
-    actorId: string,
-    environmentIds: string[],
-  ) => {
+  get: async (instanceId: string, environmentIds: string[]) => {
     const instance = await instanceRepository.findByIdAndEnvironmentIds(
       instanceId,
       environmentIds,
@@ -182,7 +178,14 @@ export const instanceService = {
 
     const task = await taskRepository.findLatestByInstanceId(instance.id);
     if (!task) {
-      return { instance, workflowVersion, node: null, task: null, latestTaskExecution: null, latestUserTaskExecution: null };
+      return {
+        instance,
+        workflowVersion,
+        node: null,
+        task: null,
+        latestTaskExecution: null,
+        latestUserTaskExecution: null,
+      };
     }
 
     const node = await nodeService.getById(task.node_id);
@@ -190,17 +193,37 @@ export const instanceService = {
       throw new DataIntegrityError(`Node does not exist id = ${task.node_id}`);
     }
 
-    const latestTaskExecution = await taskExecutionService.getLatestByTaskId(task.id);
+    const latestTaskExecution = await taskExecutionService.getLatestByTaskId(
+      task.id,
+    );
     if (!latestTaskExecution) {
-      return { instance, workflowVersion, node: null, task: null, latestTaskExecution: null, latestUserTaskExecution: null };
+      return {
+        instance,
+        workflowVersion,
+        node: null,
+        task: null,
+        latestTaskExecution: null,
+        latestUserTaskExecution: null,
+      };
     }
 
     let latestUserTaskExecution;
     if (node.type === NodeTypes.USER) {
-      latestUserTaskExecution = await taskExecutionService.getLatestUserTaskExecutionByTaskId(latestTaskExecution.id);
+      latestUserTaskExecution =
+        await taskExecutionService.getLatestUserTaskExecutionByTaskId(
+          latestTaskExecution.id,
+        );
     }
 
-    return { instance, workflow_name, workflowVersion, node, task, latestTaskExecution, latestUserTaskExecution };
+    return {
+      instance,
+      workflow_name,
+      workflowVersion,
+      node,
+      task,
+      latestTaskExecution,
+      latestUserTaskExecution,
+    };
   },
 
   getLockedInProgressOrPausedRelations: async (
@@ -308,35 +331,11 @@ export const instanceService = {
         transaction: transaction,
       });
 
-      if (instance.auto_advance === false) {
-        await taskService.createWithStatus(
-          startNode,
-          instance,
-          TaskStatuses.PAUSED,
-          transaction,
-        );
-        return { instance, workflowVersion };
-      }
-
-      try {
-        await taskService.create(startNode, instance, transaction);
-      } catch (err) {
-        let message = "Unexpected error";
-
-        if (err instanceof Error) {
-          message = err.message || message;
-        }
-
-        instance = await instanceService.fail(
-          instance.id,
-          {
-            message,
-            error: err,
-          },
-          transaction,
-        );
-      }
-
+      await taskService.create({
+        instance,
+        node: startNode,
+        transaction,
+      });
       return { instance, workflowVersion };
     });
   },
@@ -510,7 +509,9 @@ export const instanceService = {
       const instanceContext = instance.current_variables
         ? converterUtils.parseOrThrow(ContextSchema, instance.current_variables)
         : {
-            constants: converterUtils.jsonValueToObject(instance.input_variables),
+            constants: converterUtils.jsonValueToObject(
+              instance.input_variables,
+            ),
             fetchables: {},
             urls: {},
             secrets: {},

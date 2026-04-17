@@ -5,6 +5,7 @@ import {
   UserNodeConfigurationSchema,
   ServiceNodeConfigurationSchema,
   ScriptNodeConfigurationSchema,
+  EmailNodeConfigurationSchema,
   DecisionNodeConfigurationSchema,
   NodeSchema,
   EdgeSchema,
@@ -12,6 +13,7 @@ import {
   StartNodeDataMapSchema,
   RuleSchema,
   DefaultRuleSchema,
+  BackoffSchema,
 } from "../schemas/node.schema.js";
 import type { NodeType } from "./database.js";
 import { NodeTypes } from "./enums.js";
@@ -32,15 +34,19 @@ export type ScriptNodeConfiguration = z.infer<
   typeof ScriptNodeConfigurationSchema
 >;
 
+export type EmailNodeConfiguration = z.infer<
+  typeof EmailNodeConfigurationSchema
+>;
+
 export type DecisionNodeConfiguration = z.infer<
   typeof DecisionNodeConfigurationSchema
 >;
 
 export type Node = z.infer<typeof NodeSchema>;
+// //
+// export type NodeConfiguration = Node["configuration"];
 
 export type Edge = z.infer<typeof EdgeSchema>;
-
-export type StartNode = Extract<Node, { type: "start" }>;
 
 export type NodeInputSchema = {
   variableNames: string[];
@@ -58,15 +64,18 @@ export type Fetchable = z.infer<typeof FetchableSchema>;
 export const NodeConfigurationSchemaMap = {
   [NodeTypes.START]: StartNodeConfigurationSchema,
   [NodeTypes.SERVICE]: ServiceNodeConfigurationSchema,
+  [NodeTypes.EMAIL]: EmailNodeConfigurationSchema,
   [NodeTypes.SCRIPT]: ScriptNodeConfigurationSchema,
   [NodeTypes.USER]: UserNodeConfigurationSchema,
   [NodeTypes.DECISION]: DecisionNodeConfigurationSchema,
   [NodeTypes.END]: EndNodeConfigurationSchema,
 } as const;
 
-export type NodeConfiguration<T extends NodeType> = z.infer<
+export type NodeConfiguration<T extends NodeType = NodeType> = z.infer<
   (typeof NodeConfigurationSchemaMap)[T]
 >;
 
 export type DecisionNodeRule = z.infer<typeof RuleSchema>;
 export type DecisionNodeDefaultRule = z.infer<typeof DefaultRuleSchema>;
+
+export type BackoffSettings = z.infer<typeof BackoffSchema>;

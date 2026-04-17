@@ -31,7 +31,7 @@ function logApiKeyError(
 
 export const authenticateRequest = async (
   req: Request,
-  res: Response,
+  _: Response,
   next: NextFunction,
 ) => {
   const authHeader = req.headers.authorization;

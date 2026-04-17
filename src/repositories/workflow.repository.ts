@@ -2,7 +2,7 @@ import { db } from "../database.js";
 import type { DB, Workflow } from "../types/database.js";
 import type { Insertable, Transaction, Updateable } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
-import type { WorkflowModel, WorkflowVersionModel } from "../types/models.js";
+import type { WorkflowModel } from "../types/models.js";
 import type { WorkflowVersionStatus } from "../types/database.js";
 
 type NewWorkflow = Insertable<Workflow>;
