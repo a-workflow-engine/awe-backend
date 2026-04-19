@@ -77,7 +77,13 @@ export const workflowGroupController = {
     res
       .status(200)
       .json(
-        buildPaginatedResponse("workflows", formattedWorkflows, total, page, limit),
+        buildPaginatedResponse(
+          "workflows",
+          formattedWorkflows,
+          total,
+          page,
+          limit,
+        ),
       );
   },
 
@@ -142,7 +148,7 @@ export const workflowGroupController = {
     res.status(200).json({});
   },
 
-  changeStatus: (req: Request, res: Response) => {
+  changeStatus: (_: Request, res: Response) => {
     res.status(200).json({
       id: "wf-uuid",
       status: "active",
@@ -152,7 +158,10 @@ export const workflowGroupController = {
 
   validate: (req: Request, res: Response) => {
     const data = WorkflowDefinitionValidateSchema.parse(req.body);
-    const result = workflowValidatorService.validateDefinition(data.nodes as any, data.edges as any);
+    const result = workflowValidatorService.validateDefinition(
+      data.nodes,
+      data.edges,
+    );
     res.status(200).json(result);
   },
 };

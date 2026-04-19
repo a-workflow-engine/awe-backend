@@ -3,8 +3,8 @@ import { FeelDataType, NodeTypes } from "../../types/enums.js";
 import type { EvaluatedContext, ExecutorResult } from "../../types/engine.js";
 import { isValidFeelType } from "../../utils/feel.utils.js";
 import { contextUtils } from "../../utils/context.utils.js";
-import { BaseExecutor } from "./BaseExecutor.js";
 import { getEmailProvider } from "../services/email/emailProviderRegistry.js";
+import { Executor } from "./Executor.js";
 
 type EmailExecutionResult = {
   status: "sent" | "failed";
@@ -16,8 +16,10 @@ type EmailExecutionResult = {
   error?: string;
 };
 
-export class EmailNodeExecutor extends BaseExecutor<typeof NodeTypes.EMAIL> {
-  private mapEmailResultToOutput(emailResult: EmailExecutionResult): ExecutorResult | null {
+export class EmailNodeExecutor extends Executor<typeof NodeTypes.EMAIL> {
+  private mapEmailResultToOutput(
+    emailResult: EmailExecutionResult,
+  ): ExecutorResult | null {
     for (const dataMap of this.configuration.responseMap ?? []) {
       const value = contextUtils.getByJsonPath(emailResult, dataMap.jsonPath);
       if (value === undefined) {
@@ -51,7 +53,9 @@ export class EmailNodeExecutor extends BaseExecutor<typeof NodeTypes.EMAIL> {
         .trim();
 
       if (!from) {
-        throw new DataIntegrityError("Email sender evaluated to an empty string");
+        throw new DataIntegrityError(
+          "Email sender evaluated to an empty string",
+        );
       }
 
       const authUser = contextUtils
@@ -129,8 +133,6 @@ export class EmailNodeExecutor extends BaseExecutor<typeof NodeTypes.EMAIL> {
         FeelDataType.STRING,
       );
 
-      console.log("Sending email with", {authUser, authPass });
-
       const sendResult = await provider.send(
         {
           from,
@@ -152,9 +154,7 @@ export class EmailNodeExecutor extends BaseExecutor<typeof NodeTypes.EMAIL> {
         messageId: sendResult.messageId,
         accepted: sendResult.accepted,
         rejected: sendResult.rejected,
-        ...(sendResult.response
-          ? { response: sendResult.response }
-          : {}),
+        ...(sendResult.response ? { response: sendResult.response } : {}),
       };
 
       this.outputVariables.email = emailResult;
@@ -167,7 +167,8 @@ export class EmailNodeExecutor extends BaseExecutor<typeof NodeTypes.EMAIL> {
 
       return await this.getCompletedResult();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown email error";
+      const message =
+        error instanceof Error ? error.message : "Unknown email error";
 
       const failure: EmailExecutionResult = {
         status: "failed",

@@ -6,6 +6,7 @@ import {
   WorkflowVersionListSchema,
   WorkflowVersionPromoteSchema,
   WorkflowVersionPromoteResponseSchema,
+  WorkflowVersionSaveSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
@@ -166,6 +167,17 @@ export const workflowVersionController = {
       description: workflowVersion.description,
       updatedAt: workflowVersion.modified_on,
     });
+  },
+
+  save: async (req: Request, res: Response) => {
+    const data = WorkflowVersionSaveSchema.parse({
+      ...req.body,
+      actor: req.actor,
+    });
+
+    const result = await workflowVersionService.save(data, req.environmentIds);
+
+    return res.status(200).json(result);
   },
 
   publish: async (req: Request, res: Response) => {

@@ -20,7 +20,10 @@ import {
 } from "../utils/feel.utils.js";
 import { graphUtils } from "../utils/graph.utils.js";
 import { parser as pythonParser } from "@lezer/python";
-import { JSONPath } from "jsonpath-plus";
+import type {
+  Edge as WorkflowEdge,
+  Node as WorkflowNode,
+} from "../types/workflow.js";
 
 export type ValidationError = {
   code: number;
@@ -69,32 +72,11 @@ export enum ValidationErrorCode {
 
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
 
-const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
-
 const JSONPATH_REGEX =
   /^\$(?:\.(?:[a-zA-Z_][a-zA-Z0-9_-]*|\*)|\[(?:\d+|\*|'[^']+'|"[^"]+")\]|\.\.)*$/;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function extractContextReferences(expression: string): string[] {
-  const refs = new Set<string>();
-  for (const match of expression.matchAll(CONTEXT_REFERENCE_REGEX)) {
-    if (match[1]) refs.add(match[1]);
-  }
-  return [...refs];
-}
-
-function getNodeInputVariables(node: NodeModel): Set<string> {
-  if (!node.input_schema) {
-    return new Set<string>();
-  }
-
-  const parsedSchema = converterUtils.jsonValueToNodeInputSchema(
-    node.input_schema,
-  );
-  return new Set(parsedSchema.variableNames);
 }
 
 function getNodeOutputVariables(node: NodeModel): Set<string> {
@@ -287,6 +269,7 @@ function validateExpression(
   validator: ExpressionValidator = validateFeelExpression,
   inputVariables?: Set<string>,
 ): void {
+  inputVariables;
   if (!expression?.trim()) return;
 
   const result = validator(expression);
@@ -298,7 +281,6 @@ function validateExpression(
     });
     return;
   }
-
 }
 
 function validateRequired(
@@ -370,6 +352,52 @@ function validateTimeoutMs(
       nodeId,
     });
   }
+}
+
+function toValidationModels(
+  nodes: WorkflowNode[],
+  edges: WorkflowEdge[],
+): { nodes: NodeModel[]; edges: EdgeModel[] } {
+  const startNode = nodes.find((node) => node.type === NodeTypes.START);
+
+  const fetchablesMap = startNode
+    ? nodeSchemaService.getFetchablesMap(
+        (startNode.configuration as { inputDataMap: any[] }).inputDataMap,
+        (startNode.configuration as { fetchables: any[] }).fetchables,
+      )
+    : {};
+
+  const validationNodes = nodes.map((node) => {
+    const { inputSchema, outputSchema } = nodeSchemaService.getInputOutputSchemas(
+      node,
+      fetchablesMap,
+    );
+
+    return {
+      id: node.id,
+      client_id: node.id,
+      type: node.type,
+      name: node.label ?? null,
+      description: node.description ?? null,
+      configuration: converterUtils.objectToJsonValue(node.configuration),
+      input_schema: converterUtils.objectToJsonValue(inputSchema),
+      output_schema: converterUtils.objectToJsonValue(outputSchema),
+    } as NodeModel;
+  });
+
+  const validationEdges = edges.map((edge) => {
+    return {
+      id: edge.id,
+      client_id: edge.id,
+      source_node_id: edge.sourceNodeId,
+      destination_node_id: edge.targetNodeId ?? null,
+      rule_id: edge.ruleId ?? null,
+      condition_expression: edge.label ?? null,
+      name: edge.label ?? null,
+    } as EdgeModel;
+  });
+
+  return { nodes: validationNodes, edges: validationEdges };
 }
 
 function calculateDataFlow(
@@ -466,7 +494,7 @@ function validateStartNode(
       assignedOutputs.add(entry.contextVariableName.trim());
 
       // if (!entry.fetchableId) {
-        startNodeInputVariables.add(entry.contextVariableName.trim());
+      startNodeInputVariables.add(entry.contextVariableName.trim());
       // }
     }
 
@@ -1460,9 +1488,13 @@ export const workflowValidatorService = {
   },
 
   validateDefinition: (
-    nodes: NodeModel[],
-    edges: EdgeModel[],
+    nodes: WorkflowNode[],
+    edges: WorkflowEdge[],
   ): ValidationResult => {
-    return workflowValidatorService.validate(nodes, edges);
+    const validationModels = toValidationModels(nodes, edges);
+    return workflowValidatorService.validate(
+      validationModels.nodes,
+      validationModels.edges,
+    );
   },
 };

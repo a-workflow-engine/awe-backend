@@ -6,9 +6,9 @@ import { getLogger } from "../logger.js";
 
 export const errorHandler = (
   err: Error,
-  req: Request,
+  _: Request,
   res: Response,
-  next: NextFunction,
+  __: NextFunction,
 ) => {
   const logger = getLogger();
   logger.error(err);
