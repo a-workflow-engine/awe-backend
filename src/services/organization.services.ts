@@ -3,32 +3,32 @@ import { db } from "../database.js";
 import { ActorTypes } from "../types/enums.js";
 import { actorRepository } from "../repositories/actor.repository.js";
 import { organizationRepository } from "../repositories/organization.repository.js";
-import type { Transaction } from "kysely";
-import type { DB } from "../types/database.js";
-import type { OrganizationModel } from "../types/models.js";
-
-export type CreateOrganizationInput = {
-  name: string;
-  email: string;
-  password: string;
-};
+import type {
+  EnvironmentModel,
+  OrganizationModel,
+  SystemModel,
+} from "../types/models.js";
+import { environmentService } from "./environment.services.js";
+import type { RequestContext } from "../types/auth.js";
 
 export const organizationService = {
-  create: async (
-    data: CreateOrganizationInput,
-    transaction?: Transaction<DB>,
-  ) => {
-    const passwordHash = await argon2.hash(data.password);
-
-    const createNewOrganization = async (
-      transaction: Transaction<DB>,
-    ): Promise<OrganizationModel> => {
+  register: async (data: {
+    name: string;
+    email: string;
+    password: string;
+  }): Promise<{
+    organization: OrganizationModel;
+    environments: EnvironmentModel[];
+  }> => {
+    return await db.transaction().execute(async (transaction) => {
       const actor = await actorRepository.insert(
         { type: ActorTypes.ORGANIZATION_ACCOUNT },
         transaction,
       );
 
-      return await organizationRepository.insert(
+      const passwordHash = await argon2.hash(data.password);
+
+      const organization = await organizationRepository.insert(
         {
           actor_id: actor.id,
           name: data.name,
@@ -37,14 +37,49 @@ export const organizationService = {
         },
         transaction,
       );
+
+      const environments = await environmentService.createAllEnvironments(
+        organization.id,
+        transaction,
+      );
+
+      return {
+        organization,
+        environments,
+      };
+    });
+  },
+
+  getByActorIdWithEnvironments: async (
+    actorId: string,
+  ): Promise<
+    | {
+        organization: OrganizationModel;
+        environments: EnvironmentModel[];
+      }
+    | undefined
+  > => {
+    return await organizationRepository.findByActorIdWithEnvironments(actorId);
+  },
+
+  getCurrent: async (
+    requestContext: RequestContext,
+  ): Promise<{
+    system: SystemModel;
+    organization: OrganizationModel;
+  }> => {
+    return {
+      organization: requestContext.organization,
+      system: {
+        created_on: new Date(),
+        deleted_on: null,
+        id: "1",
+        is_deleted: false,
+        modified_on: new Date(),
+        name: "none",
+        organization_id: "1",
+        description: "",
+      },
     };
-
-    if (transaction) {
-      return await createNewOrganization(transaction);
-    }
-
-    return await db
-      .transaction()
-      .execute(async (transaction) => createNewOrganization(transaction));
   },
 };

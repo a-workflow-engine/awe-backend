@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { systemController } from "../controllers/system.controller.js";
+import { systemController } from "../controllers/organization.controller.js";
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
 import { apiKeyController } from "../controllers/apiKey.controller.js";
 import { resolveEnvironmentContext } from "../middlewares/environment.middleware.js";

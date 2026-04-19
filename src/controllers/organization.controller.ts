@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
-import { systemService } from "../services/system.services.js";
 import { dashboardService } from "../services/dashboard.service.js";
 import { z } from "zod";
+import { organizationService } from "../services/organization.services.js";
 
 const RegisterSystemInput = z.object({
   name: z.string().max(255),
@@ -14,36 +14,28 @@ const RegisterSystemInput = z.object({
 export const systemController = {
   register: async (req: Request, res: Response) => {
     const data = RegisterSystemInput.parse(req.body);
-    const { organization, system, environment } =
-      await systemService.createProduction({
-        organization: {
-          name: data.orgName,
-          email: data.contactEmail,
-          password: data.password,
-        },
-        system: {
-          name: data.name,
-          ...(data.description !== undefined && {
-            description: data.description,
-          }),
-        },
-      });
+    const { organization, environments } = await organizationService.register({
+      name: data.orgName,
+      email: data.contactEmail,
+      password: data.password,
+    });
 
     res.status(201).json({
       system: {
-        id: system.id,
-        name: system.name,
+        id: organization.id,
+        name: organization.name,
         orgName: organization.name,
         contactEmail: organization.email,
-        environments: environment.map((env) => env.type),
-        createdAt: system.created_on,
+        environments: environments.map((env) => env.type),
+        createdAt: organization.created_on,
       },
     });
   },
 
   me: async (req: Request, res: Response) => {
-    const { system, organization } =
-      await systemService.getCurrentSystem(req.actor);
+    const { system, organization } = await organizationService.getCurrent(
+      req.context,
+    );
 
     res.status(200).json({
       system: {
@@ -59,7 +51,7 @@ export const systemController = {
 
   dashboard: async (req: Request, res: Response) => {
     const overview = await dashboardService.getOverview(
-      req.actor,
+      req.context.actor,
       req.environmentIds,
     );
 

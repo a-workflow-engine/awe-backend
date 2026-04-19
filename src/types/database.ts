@@ -85,7 +85,8 @@ export interface Environment {
   deleted_on: Timestamp | null;
   id: Generated<string>;
   is_deleted: Generated<boolean>;
-  system_id: string;
+  organization_id: string;
+  system_id: string | null;
   type: EnvironmentType;
 }
 

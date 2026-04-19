@@ -21,16 +21,17 @@ export const workflowVersionController = {
   list: async (req: Request, res: Response) => {
     const data = WorkflowVersionListSchema.parse({
       ...req.params,
-      actor: req.actor,
+      actor: req.context.actor,
     });
     const { page, limit, offset } = parsePaginationFromRequest(req);
 
-    const { workflow, items, total } = await workflowVersionService.listPaginated(
-      data,
-      limit,
-      offset,
-      req.environmentIds,
-    );
+    const { workflow, items, total } =
+      await workflowVersionService.listPaginated(
+        data,
+        limit,
+        offset,
+        req.environmentIds,
+      );
 
     const environment = getEnvironmentById(
       req.environmentIds,
@@ -59,7 +60,7 @@ export const workflowVersionController = {
     const data = WorkflowVersionCreateSchema.parse({
       ...req.body,
       workflowId: req.params.workflowId,
-      actor: req.actor,
+      actor: req.context.actor,
     });
 
     const workflowVersion = await workflowVersionService.createNew(
@@ -81,7 +82,7 @@ export const workflowVersionController = {
   validate: async (req: Request, res: Response) => {
     const data = WorkflowVersionValidateSchema.parse({
       versionId: req.params.versionId,
-      actor: req.actor,
+      actor: req.context.actor,
     });
 
     const { result, workflowVersion } = await workflowVersionService.validate(
@@ -99,7 +100,7 @@ export const workflowVersionController = {
   get: async (req: Request, res: Response) => {
     const data = WorkflowVersionDetailSchema.parse({
       versionId: req.params.versionId,
-      actor: req.actor,
+      actor: req.context.actor,
     });
 
     const { workflow, workflowVersion, nodes, edges, startVariables } =
@@ -130,7 +131,7 @@ export const workflowVersionController = {
     const data = WorkflowVersionUpdateStatusSchema.parse({
       versionId: req.params.versionId,
       ...req.body,
-      actor: req.actor,
+      actor: req.context.actor,
     });
 
     const workflowVersion = await workflowVersionService.changeStatus(
@@ -152,7 +153,7 @@ export const workflowVersionController = {
     const data = WorkflowVersionUpdateSchema.parse({
       versionId: req.params.versionId,
       ...req.body,
-      actor: req.actor,
+      actor: req.context.actor,
     });
     const workflowVersion = await workflowVersionService.update(
       data,
@@ -172,7 +173,7 @@ export const workflowVersionController = {
     const data = WorkflowVersionUpdateStatusSchema.parse({
       versionId: req.params.versionId,
       status: WorkflowVersionStatuses.PUBLISHED,
-      actor: req.actor,
+      actor: req.context.actor,
     });
     const workflowVersion = await workflowVersionService.changeStatus(
       data,
@@ -191,7 +192,7 @@ export const workflowVersionController = {
     const data = WorkflowVersionUpdateStatusSchema.parse({
       versionId: req.params.versionId,
       status: WorkflowVersionStatuses.ACTIVE,
-      actor: req.actor,
+      actor: req.context.actor,
     });
     const workflowVersion = await workflowVersionService.changeStatus(
       data,
@@ -209,7 +210,7 @@ export const workflowVersionController = {
   clone: async (req: Request, res: Response) => {
     const data = WorkflowVersionDetailSchema.parse({
       versionId: req.params.versionId,
-      actor: req.actor,
+      actor: req.context.actor,
     });
     const clonedVersion = await workflowVersionService.clone(
       data,
@@ -221,10 +222,13 @@ export const workflowVersionController = {
   promote: async (req: Request, res: Response) => {
     const data = WorkflowVersionPromoteSchema.parse({
       versionId: req.params.versionId,
-      actor: req.actor,
+      actor: req.context.actor,
     });
 
-    const result = await workflowVersionService.promote(data, req.environmentIds);
+    const result = await workflowVersionService.promote(
+      data,
+      req.environmentIds,
+    );
     const response = WorkflowVersionPromoteResponseSchema.parse(result);
     return res.status(201).json(response);
   },

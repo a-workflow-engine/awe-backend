@@ -9,6 +9,9 @@ import type { StringValue } from "ms";
 import { randomUUID } from "node:crypto";
 import { AppError } from "../errors/AppError.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
+import type { RequestContext } from "../types/auth.js";
+import { organizationService } from "./organization.services.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 type RefreshTokenPayload = {
   actor: ActorModel;
@@ -100,13 +103,27 @@ export const authService = {
     }
   },
 
-  getActorOrThrow: (accessToken: string) => {
+  getRequestContextOrThrow: async (
+    accessToken: string,
+  ): Promise<RequestContext> => {
     try {
       const payload = jwt.verify(accessToken, Config.JWT_ACCESS_SECRET) as {
         actor: ActorModel;
       };
 
-      return payload.actor;
+      const models = await organizationService.getByActorIdWithEnvironments(
+        payload.actor.id,
+      );
+
+      if (!models) {
+        throw new DataIntegrityError(`Invalid actor=${payload.actor}`);
+      }
+
+      return {
+        actor: payload.actor,
+        organization: models.organization,
+        environments: models.environments,
+      };
     } catch (err) {
       if (err instanceof jwt.JsonWebTokenError) {
         throw new AuthError("Invalid access token", err);

@@ -14,6 +14,7 @@ import { actorRepository } from "../repositories/actor.repository.js";
 import { baseLogger } from "../logger.js";
 import type { ApiKeyModel } from "../types/models.js";
 import type { EnvironmentType } from "../types/database.js";
+import type { RequestContext } from "../types/auth.js";
 
 export const apiKeyService = {
   getAll: async (
@@ -58,7 +59,9 @@ export const apiKeyService = {
     const environments = await environmentRepository.findByOrganizationActorId(
       actor.id,
     );
-    const selectedEnvironment = environments.find((e) => e.type === environment);
+    const selectedEnvironment = environments.find(
+      (e) => e.type === environment,
+    );
 
     if (!selectedEnvironment) {
       throw new NotFoundError(
@@ -111,12 +114,17 @@ export const apiKeyService = {
       throw new AuthError();
     }
 
-    const environments = await environmentRepository.findByOrganizationActorId(actor.id);
+    const environments = await environmentRepository.findByOrganizationActorId(
+      actor.id,
+    );
     if (!environments) {
       throw new NotFoundError("Environment not found");
     }
 
-    const apiKey = await apiKeyRepository.findById(id, environments.map((env) => env.id));
+    const apiKey = await apiKeyRepository.findById(
+      id,
+      environments.map((env) => env.id),
+    );
 
     if (!apiKey) {
       baseLogger.warn(
@@ -156,27 +164,28 @@ export const apiKeyService = {
     return revokedKey;
   },
 
-  getActorOrThrow: async (apiKeySecret: string) => {
+  getRequestContextOrThrow: async (
+    apiKeySecret: string,
+  ): Promise<RequestContext> => {
     const [prefix, secret] = apiKeySecret.split(".", 2);
     if (!prefix || !secret) {
       throw new AuthError("Invalid Api Key");
     }
 
-    const apiKey = await apiKeyRepository.findByPrefix(prefix);
+    const models = await apiKeyRepository.findByPrefixWithRelations(prefix);
 
     if (
-      !apiKey ||
-      apiKey.is_revoked ||
-      !(await argon2.verify(apiKey.key_hash, secret))
+      !models ||
+      models.apiKey.is_revoked ||
+      !(await argon2.verify(models.apiKey.key_hash, secret))
     ) {
       throw new AuthError();
     }
 
-    const actor = await actorRepository.findById(apiKey.actor_id);
-    if (!actor) {
-      throw new DataIntegrityError("Api key exists without Actor");
-    }
-
-    return actor;
+    return {
+      actor: models.actor,
+      organization: models.organization,
+      environments: [models.environment],
+    };
   },
 };
