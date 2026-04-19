@@ -11,6 +11,10 @@ const TokenInput = z.object({
   refreshToken: z.string(),
 });
 
+const LogoutInput = z.object({
+  refreshToken: z.string().optional(),
+});
+
 export const authController = {
   login: async (req: Request, res: Response) => {
     const { email, password } = LoginInput.parse(req.body);
@@ -40,8 +44,12 @@ export const authController = {
   },
 
   logout: async (req: Request, res: Response) => {
-    const { refreshToken } = TokenInput.parse(req.body);
-    await authService.logout(refreshToken);
+    const { refreshToken } = LogoutInput.parse(req.body ?? {});
+
+    if (refreshToken) {
+      await authService.logout(refreshToken);
+    }
+
     res.status(200).json({});
   },
 };

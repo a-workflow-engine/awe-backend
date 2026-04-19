@@ -199,7 +199,8 @@ export const engineUtils = {
     executionResult: ExecutorResult;
   }): Promise<void> => {
     const { jobData, executionResult } = params;
-    db.transaction()
+    await db
+      .transaction()
       .execute(async (transaction) => {
         let [{ instance, task, taskExecution }, node] = await Promise.all([
           instanceService.getLockedInProgressOrPausedRelations(
@@ -229,22 +230,26 @@ export const engineUtils = {
           transaction,
         }));
 
-        engineUtils.processControlSignal({ instance, task, transaction });
+        ({ instance, task } = await engineUtils.processControlSignal({
+          instance,
+          task,
+          transaction,
+        }));
 
         if (!statusUtils.instanceCanExecute(instance)) {
           return;
         }
 
-        await dispatchNextNode({ instance, transaction }).catch(() => {
-          instanceService.fail(
+        await dispatchNextNode({ instance, transaction }).catch(async () => {
+          await instanceService.fail(
             instance.id,
             { message: "Task creation failed" },
             transaction,
           );
         });
       })
-      .catch((error) => {
-        engineUtils.onTaskFailure({
+      .catch(async (error) => {
+        await engineUtils.onTaskFailure({
           instanceId: jobData.instanceId,
           taskId: jobData.taskId,
           message: "Failed to update instance",
