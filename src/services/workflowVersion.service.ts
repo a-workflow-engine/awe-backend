@@ -18,6 +18,7 @@ import {
   WorkflowVersionListSchema,
   WorkflowVersionPromoteSchema,
   WorkflowVersionPromoteResponseSchema,
+  WorkflowVersionSaveSchema,
   WorkflowVersionUpdateSchema,
   WorkflowVersionUpdateStatusSchema,
   WorkflowVersionValidateSchema,
@@ -42,6 +43,7 @@ export type ValidateInput = z.infer<typeof WorkflowVersionValidateSchema>;
 export type CreateVersionInput = z.infer<typeof WorkflowVersionCreateSchema>;
 export type ListVersionInput = z.infer<typeof WorkflowVersionListSchema>;
 export type UpdateVersionInput = z.infer<typeof WorkflowVersionUpdateSchema>;
+export type SaveVersionInput = z.infer<typeof WorkflowVersionSaveSchema>;
 export type PromoteVersionInput = z.infer<typeof WorkflowVersionPromoteSchema>;
 export type PromoteVersionOutput = z.infer<
   typeof WorkflowVersionPromoteResponseSchema
@@ -221,7 +223,12 @@ export const workflowVersionService = {
       edgeService.toEdgeSchema(edge, nodeModels),
     );
 
-    const startVariables: { jsonPath: string; dataType: FeelDataType }[] = [];
+    const startVariables: {
+      jsonPath: string;
+      dataType: FeelDataType;
+      required: boolean;
+      defaultValue?: unknown;
+    }[] = [];
 
     const startNode = nodes.find((node) => node.type === NodeTypes.START);
 
@@ -240,6 +247,10 @@ export const workflowVersionService = {
           startVariables.push({
             jsonPath: data.jsonPath,
             dataType: data.dataType,
+            required: data.required !== false,
+            ...(data.required === false
+              ? { defaultValue: data.defaultValue }
+              : {}),
           });
         }
       });
@@ -389,6 +400,65 @@ export const workflowVersionService = {
     }
 
     return { result, workflowVersion };
+  },
+
+  save: async (data: SaveVersionInput, environmentIds: string[]) => {
+    const versionId = data.versionId ?? null;
+    const isUpdate = versionId !== null;
+
+    let savedVersion: WorkflowVersionModel;
+    if (versionId) {
+      savedVersion = await workflowVersionService.update(
+        {
+          versionId,
+          actor: data.actor,
+          description: data.description,
+          nodes: data.nodes,
+          edges: data.edges,
+        },
+        environmentIds,
+      );
+    } else {
+      savedVersion = await workflowVersionService.createNew(
+        {
+          workflowId: data.workflowId,
+          description: data.description,
+          nodes: data.nodes,
+          edges: data.edges,
+          actor: data.actor,
+        },
+        WorkflowVersionStatuses.DRAFT,
+        undefined,
+        environmentIds,
+      );
+    }
+
+    const { result, workflowVersion } = await workflowVersionService.validate(
+      {
+        versionId: savedVersion.id,
+        actor: data.actor,
+      },
+      environmentIds,
+    );
+
+    return {
+      save: {
+        operation: isUpdate ? "updated" : "created",
+        successful: true,
+        workflowId: savedVersion.workflow_id,
+        versionId: savedVersion.id,
+        version: savedVersion.version,
+        status: workflowVersion.status,
+        savedAt: workflowVersion.modified_on,
+      },
+      validation: {
+        successful: true,
+        valid: result.valid,
+        status: workflowVersion.status,
+        errors: result.errors,
+        warnings: [],
+      },
+    };
   },
 
   changeStatus: async (
