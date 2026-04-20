@@ -24,7 +24,13 @@ export const dashboardService = {
       await Promise.all([
         workflowRepository.countByEnvironmentIds(environmentIds),
         instanceRepository.findRecentByEnvironmentIds(environmentIds, 5),
-        userTaskService.getPendingPaginated(actor, environmentIds, 5, 0),
+        userTaskService.getPendingPaginated(
+          actor,
+          undefined,
+          environmentIds,
+          5,
+          0,
+        ),
         instanceRepository.countByEnvironmentIds(environmentIds),
         instanceRepository.countByEnvironmentIdsAndStatus(
           environmentIds,

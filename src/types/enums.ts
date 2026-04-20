@@ -109,6 +109,13 @@ export const SecretProviderTypes = {
   INFISICAL: "infisical",
 } as const satisfies Record<string, SecretProviderType>;
 
+
+export enum VersionIncrementType {
+  MAJOR = "major",
+  MINOR = "minor",
+  PATCH = "patch",
+}
+
 export enum Runtime {
   PYTHON_3 = "python3",
 }
