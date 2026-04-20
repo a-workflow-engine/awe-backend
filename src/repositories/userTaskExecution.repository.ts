@@ -241,6 +241,7 @@ export const userTaskExecutionRepository = {
   findByEnvironmentIdsAndStatusPaginated: async (
     environmentIds: string[],
     status: TaskStatus,
+    assignee: string | undefined,
     limit: number,
     offset: number,
     transaction?: Transaction<DB>,
@@ -256,7 +257,9 @@ export const userTaskExecutionRepository = {
     }
 
     try {
-      const items = await (transaction ?? db)
+      const executor = transaction ?? db;
+
+      let baseQuery = executor
         .selectFrom("user_task_execution")
         .innerJoin(
           "task_execution",
@@ -271,49 +274,60 @@ export const userTaskExecutionRepository = {
           "instance.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .select((eb) => [
-          eb.ref("user_task_execution.id").as("user_task_execution_id"),
-          eb.ref("user_task_execution.title").as("user_task_execution_title"),
-          eb
-            .ref("user_task_execution.assignee")
-            .as("user_task_execution_assignee"),
-          eb
-            .ref("user_task_execution.created_on")
-            .as("user_task_execution_created_on"),
-
-          eb.ref("task.instance_id").as("instance_id"),
-          eb.ref("workflow.id").as("workflow_id"),
-          eb.ref("workflow.name").as("workflow_name"),
-          eb.ref("workflow_version.version").as("workflow_version"),
-        ])
         .where("task_execution.status", "=", status)
-        .where("workflow.environment_id", "in", environmentIds)
-        .orderBy("user_task_execution.created_on", "desc")
-        .limit(limit)
-        .offset(offset)
-        .execute();
+        .where("workflow.environment_id", "in", environmentIds);
 
-      const countResult = await (transaction ?? db)
-        .selectFrom("user_task_execution")
-        .innerJoin(
-          "task_execution",
-          "task_execution.id",
-          "user_task_execution.task_execution_id",
-        )
-        .innerJoin("task", "task.id", "task_execution.task_id")
-        .innerJoin("instance", "instance.id", "task.instance_id")
-        .innerJoin(
-          "workflow_version",
-          "workflow_version.id",
-          "instance.workflow_version_id",
-        )
-        .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-        .select((eb) =>
-          eb.fn.count<number>("user_task_execution.id").as("count"),
-        )
-        .where("task_execution.status", "=", status)
-        .where("workflow.environment_id", "in", environmentIds)
-        .executeTakeFirstOrThrow();
+
+      if (assignee) {
+        baseQuery = baseQuery.where(
+          "user_task_execution.assignee",
+          "like",
+          `%${assignee}%` ,
+        );
+      }
+
+      const [items, countResult] = await Promise.all([
+        baseQuery
+          .select((expressionBuilder) => [
+            expressionBuilder
+              .ref("user_task_execution.id")
+              .as("user_task_execution_id"),
+
+            expressionBuilder
+              .ref("user_task_execution.title")
+              .as("user_task_execution_title"),
+
+            expressionBuilder
+              .ref("user_task_execution.assignee")
+              .as("user_task_execution_assignee"),
+
+            expressionBuilder
+              .ref("user_task_execution.created_on")
+              .as("user_task_execution_created_on"),
+
+            expressionBuilder.ref("task.instance_id").as("instance_id"),
+
+            expressionBuilder.ref("workflow.id").as("workflow_id"),
+
+            expressionBuilder.ref("workflow.name").as("workflow_name"),
+
+            expressionBuilder
+              .ref("workflow_version.version")
+              .as("workflow_version"),
+          ])
+          .orderBy("user_task_execution.created_on", "desc")
+          .limit(limit)
+          .offset(offset)
+          .execute(),
+
+        baseQuery
+          .select((expressionBuilder) =>
+            expressionBuilder.fn
+              .count<number>("user_task_execution.id")
+              .as("count"),
+          )
+          .executeTakeFirstOrThrow(),
+      ]);
 
       const formattedItems = items.map((row) => ({
         id: row.user_task_execution_id,

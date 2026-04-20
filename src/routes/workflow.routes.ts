@@ -24,7 +24,7 @@ workflowRouter.post(
 );
 
 workflowRouter.post(
-  "/save",
+  "/versions/:versionId/save",
   resolveEnvironmentContextFromActor,
   workflowVersionController.save,
 );

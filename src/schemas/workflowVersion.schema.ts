@@ -36,7 +36,6 @@ export const WorkflowVersionValidateSchema = z.object({
 });
 
 export const WorkflowVersionSaveSchema = z.object({
-  workflowId: z.uuidv4(),
   versionId: z.uuidv4().nullable().optional(),
   actor: ActorSchema,
   description: z.string().nullable().optional(),

@@ -6,6 +6,7 @@ import type {
   InstanceEntityType,
   InstanceEventType,
 } from "../types/database.js";
+import { LogEventTypes, TaskStatuses } from "../types/enums.js";
 
 export type NewInstanceLog = Insertable<InstanceLog>;
 
@@ -264,7 +265,12 @@ export const instanceLogRepository = {
         }
       }
 
-      const totalExecutionsCount = taskExecutionLogRows.length;
+      let totalExecutionsCount = 0;
+      for(const log of taskExecutionLogRows) {
+        if (log?.event_type === LogEventTypes.STARTED || log?.event_type === LogEventTypes.RETRIED) {
+          totalExecutionsCount++;
+        }
+      };
 
       let durationMs: number | null = null;
       if (instanceRow.started_on && instanceRow.ended_on) {

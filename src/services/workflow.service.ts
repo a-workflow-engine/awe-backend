@@ -1,3 +1,4 @@
+import { en } from "zod/locales";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
@@ -48,7 +49,6 @@ export const workflowService = {
       workflowRepository.findByIdAndEnvironmentIds(workflowId, environmentIds),
       workflowVersionRepository.findByWorkflowId(workflowId),
     ]);
-
     if (!workflow) {
       throw new NotFoundError("Workflow");
     }

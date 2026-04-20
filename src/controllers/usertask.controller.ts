@@ -9,8 +9,10 @@ import {
 export const userTaskController = {
   list: async (req: Request, res: Response) => {
     const { page, limit, offset } = parsePaginationFromRequest(req);
+    const assignee = req.query.assignee as string | undefined;
     const { items, total } = await userTaskService.getPendingPaginated(
       req.context.actor,
+      assignee,
       req.environmentIds,
       limit,
       offset,

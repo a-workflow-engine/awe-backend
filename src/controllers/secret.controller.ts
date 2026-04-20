@@ -13,7 +13,6 @@ export const CreateNewSecretSchema = z.object({
   ),
   label: z.string(),
   key: z.string(),
-  actor: ActorSchema,
 });
 
 export const ListAllSecretsSchema = z.object({
@@ -45,10 +44,9 @@ export const secretController = {
     const data = CreateNewSecretSchema.parse({
       ...req.body,
       label: req.body.key,
-      actor: req.context.actor,
     });
 
-    const result = await secretService.createNew(data);
+    const result = await secretService.createNew(data, req.context);
 
     return res.status(201).json({
       id: result.id,
@@ -110,4 +108,3 @@ export const secretController = {
     });
   },
 };
-  

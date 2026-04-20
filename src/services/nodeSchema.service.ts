@@ -87,11 +87,6 @@ function getUserSchema(config: UserNodeConfiguration): SchemaResult {
 }
 
 function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
-  const onErrorOutputVariables =
-    config.onError.mode === "continue"
-      ? config.onError.outputMap.map((m) => m.contextVariableName)
-      : [];
-
   return buildSchema({
     expressions: [
       config.urlExpression,
@@ -99,26 +94,15 @@ function getServiceSchema(config: ServiceNodeConfiguration): SchemaResult {
 
       ...(config.headers?.map((h) => h.valueExpression) ?? []),
     ],
-    outputVariables: [
-      ...config.responseMap.map((r) => r.contextVariableName),
-      ...onErrorOutputVariables,
-    ],
+    outputVariables: config.responseMap.map((r) => r.contextVariableName),
     includeSecrets: true,
   });
 }
 
 function getScriptSchema(config: ScriptNodeConfiguration): SchemaResult {
-  const onErrorOutputVariables =
-    config.onError.mode === "continue"
-      ? config.onError.outputMap.map((m) => m.contextVariableName)
-      : [];
-
   return buildSchema({
     expressions: config.parameterMap.map((p) => p.valueExpression),
-    outputVariables: [
-      ...config.responseMap.map((r) => r.contextVariableName),
-      ...onErrorOutputVariables,
-    ],
+    outputVariables: config.responseMap.map((r) => r.contextVariableName),
     includeSecrets: true,
   });
 }
