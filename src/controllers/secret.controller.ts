@@ -16,6 +16,14 @@ export const CreateNewSecretSchema = z.object({
   actor: ActorSchema,
 });
 
+export const ListAllSecretsSchema = z.object({
+  providerId: z.string(),
+  environment: z.enum(
+    Object.values(EnvironmentTypes) as [EnvironmentType, ...EnvironmentType[]],
+  ),
+  actor: ActorSchema,
+});
+
 const mapSecret = (s: {
   id: string;
   provider_id: string;
@@ -36,6 +44,7 @@ export const secretController = {
   create: async (req: Request, res: Response) => {
     const data = CreateNewSecretSchema.parse({
       ...req.body,
+      label: req.body.key,
       actor: req.actor,
     });
 
@@ -55,7 +64,10 @@ export const secretController = {
     const environments = parseEnvironmentsFromQuery(req.query.environment);
     const result =
       environments.length > 0
-        ? await secretService.listByActorAndEnvironments(req.actor!, environments)
+        ? await secretService.listByActorAndEnvironments(
+            req.actor!,
+            environments,
+          )
         : await secretService.listByActor(req.actor!);
     return res.status(200).json({
       secrets: result.map(mapSecret),
@@ -69,19 +81,33 @@ export const secretController = {
       secrets: result.map(mapSecret),
     });
   },
-    delete: async (req: Request, res: Response) => {
-      const secretId = req.params.secretId as string;
-      const deleted = await secretService.delete(secretId, req.actor!);
-    
-      if (!deleted) {
-        return res.status(404).json({
-          error: "Secret not found",
-        });
-      }
 
-      return res.status(200).json({
-        success: true,
-        message: "Secret deleted successfully",
+  delete: async (req: Request, res: Response) => {
+    const secretId = req.params.secretId as string;
+    const deleted = await secretService.delete(secretId, req.actor!);
+
+    if (!deleted) {
+      return res.status(404).json({
+        error: "Secret not found",
       });
-    },
-   };
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Secret deleted successfully",
+    });
+  },
+
+  listAllSecrets: async (req: Request, res: Response) => {
+    const data = ListAllSecretsSchema.parse({
+      ...req.query,
+      providerId: req.params.providerId,
+      actor: req.actor,
+    });
+    const environments = parseEnvironmentsFromQuery(data.environment);
+    const result = await secretService.listAllSecrets(data.actor, environments, data.providerId);
+    return res.status(200).json({
+      secrets: result,
+    });
+  }
+};

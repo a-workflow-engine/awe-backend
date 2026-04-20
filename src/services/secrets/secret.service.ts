@@ -139,13 +139,11 @@ export const secretService = {
     secretId: string,
     actor: z.infer<typeof ActorSchema>,
   ): Promise<boolean> => {
-    // Verify the secret belongs to this actor
     const secret = await secretReferenceRepository.findById(secretId);
     if (!secret) {
       throw new NotFoundError("Secret");
     }
 
-    // Verify that the actor has access to this secret
     const userSecrets = await secretReferenceRepository.findByActor(actor.id);
     if (!userSecrets.some((s) => s.id === secretId)) {
       throw new InvalidOperationError(
@@ -154,5 +152,32 @@ export const secretService = {
     }
 
     return await secretReferenceRepository.deleteById(secretId);
+  },
+
+  listAllSecrets: async (
+    actor: z.infer<typeof ActorSchema>,
+    environments: EnvironmentType[],
+    providerId: string,
+  ) => {
+
+    
+    const providerModel = await secretProviderRepository.findById(
+      providerId,
+    );
+    if (!providerModel) {
+      throw new NotFoundError("Secret provider");
+    }
+
+    const ProviderClass = getProviderClass(providerModel.type);
+    const providerInstance = new ProviderClass(providerModel);
+    const result = await providerInstance.listAllSecrets();
+
+    if (!result) {
+      throw new InvalidOperationError(
+        "Failed to fetch secrets from provider",
+      );
+    }
+
+    return result;
   },
 };

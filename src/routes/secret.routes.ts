@@ -10,3 +10,4 @@ secretRouter.post("/", secretController.create);
 secretRouter.get("/", secretController.list);
 secretRouter.get("/by-provider/:providerId", secretController.listByProvider);
 secretRouter.delete("/:secretId", secretController.delete);
+secretRouter.get("/:providerId", secretController.listAllSecrets);
