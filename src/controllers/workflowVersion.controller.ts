@@ -173,7 +173,7 @@ export const workflowVersionController = {
   save: async (req: Request, res: Response) => {
     const data = WorkflowVersionSaveSchema.parse({
       ...req.body,
-      actor: req.actor,
+      actor: req.context.actor,
     });
 
     const result = await workflowVersionService.save(data, req.environmentIds);
