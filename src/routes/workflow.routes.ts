@@ -22,6 +22,19 @@ workflowRouter.post(
   resolveEnvironmentContextFromActor,
   workflowVersionController.create,
 );
+
+workflowRouter.post(
+  "/save",
+  resolveEnvironmentContextFromActor,
+  workflowVersionController.save,
+);
+
+workflowRouter.post(
+  "/validate",
+  resolveEnvironmentContextFromActor,
+  workflowGroupController.validate,
+);
+
 workflowRouter.patch(
   "/:workflowId",
   resolveEnvironmentContextFromActor,

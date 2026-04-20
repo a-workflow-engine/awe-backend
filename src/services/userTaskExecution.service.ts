@@ -28,6 +28,7 @@ import { Transaction } from "kysely";
 import type { DB } from "../types/database.js";
 import { ContextSchema } from "../schemas/context.schema.js";
 import type { UserNodeConfiguration } from "../types/workflow.js";
+import { DataIntegrityError } from "../errors/DataIntegrity.js";
 
 export const userTaskService = {
   create: async (params: {
@@ -136,7 +137,12 @@ export const userTaskService = {
       return {
         fieldId: data.fieldId,
         label: data.label,
+        type: data.type,
         dataType: data.type,
+        required: data.required,
+        defaultValue: data.defaultValue,
+        uiType: data.uiType,
+        options: data.options,
       };
     });
 
@@ -247,6 +253,17 @@ export const userTaskService = {
       executionResult,
     });
 
-    return { taskExecution, userTaskExecution };
+    const updatedTaskExecution =
+      await taskExecutionService.getLatestUserTaskExecutionByTaskId(
+        taskExecution.id,
+      );
+
+    if (!updatedTaskExecution) {
+      throw new DataIntegrityError(
+        `Unable to retrieve completed user task execution for task_execution_id=${taskExecution.id}`,
+      );
+    }
+
+    return { taskExecution: updatedTaskExecution, userTaskExecution };
   },
 };
