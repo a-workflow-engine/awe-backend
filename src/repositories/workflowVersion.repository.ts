@@ -87,6 +87,7 @@ export const workflowVersionRepository = {
       .selectAll()
       .where("workflow_id", "=", workflowId)
       .where("is_deleted", "=", false)
+      .where("version", "is not", null)
       .orderBy("modified_on", "desc")
       .limit(1)
       .executeTakeFirst();

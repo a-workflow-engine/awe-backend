@@ -372,17 +372,20 @@ export const workflowVersionService = {
           newStatus === WorkflowVersionStatuses.ACTIVE)
       ) {
         updatePayload.published_on = new Date();
+
         const previousWorkflowVersion =
           await workflowVersionRepository.findLatestNonNullVersionByWorkflowId(
             workflowVersion.workflow_id,
             transaction,
           );
+
         const previousVersion = coerce(previousWorkflowVersion?.version ?? "0");
         if (!previousVersion) {
           throw new DataIntegrityError(
             `Invalid semver version=${previousVersion}`,
           );
         }
+
         updatePayload.version = previousVersion.inc(data.incrementType).version;
       }
 
