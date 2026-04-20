@@ -146,6 +146,7 @@ export const workflowVersionController = {
     const data = WorkflowVersionUpdateStatusSchema.parse({
       versionId: req.params.versionId,
       status: WorkflowVersionStatuses.PUBLISHED,
+      ...req.body,
     });
     const workflowVersion = await workflowVersionService.changeStatus(
       data,
@@ -165,6 +166,7 @@ export const workflowVersionController = {
     const data = WorkflowVersionUpdateStatusSchema.parse({
       versionId: req.params.versionId,
       status: WorkflowVersionStatuses.ACTIVE,
+      ...req.body,
     });
     const workflowVersion = await workflowVersionService.changeStatus(
       data,

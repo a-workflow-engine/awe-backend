@@ -13,6 +13,13 @@ export const CreateNewSecretSchema = z.object({
   ),
   label: z.string(),
   key: z.string(),
+});
+
+export const ListAllSecretsSchema = z.object({
+  providerId: z.string(),
+  environment: z.enum(
+    Object.values(EnvironmentTypes) as [EnvironmentType, ...EnvironmentType[]],
+  ),
   actor: ActorSchema,
 });
 
@@ -36,10 +43,10 @@ export const secretController = {
   create: async (req: Request, res: Response) => {
     const data = CreateNewSecretSchema.parse({
       ...req.body,
-      actor: req.context.actor,
+      label: req.body.key,
     });
 
-    const result = await secretService.createNew(data);
+    const result = await secretService.createNew(data, req.context);
 
     return res.status(201).json({
       id: result.id,
@@ -82,6 +89,22 @@ export const secretController = {
     return res.status(200).json({
       success: true,
       message: "Secret deleted successfully",
+    });
+  },
+
+  listAllSecrets: async (req: Request, res: Response) => {
+    const data = ListAllSecretsSchema.parse({
+      ...req.params,
+      ...req.query,
+      actor: req.context.actor,
+    });
+    const result = await secretService.listAllSecrets(
+      data.providerId,
+      data.environment,
+      data.actor,
+    );
+    return res.status(200).json({
+      secrets: result,
     });
   },
 };

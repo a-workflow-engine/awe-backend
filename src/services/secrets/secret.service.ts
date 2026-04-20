@@ -59,11 +59,19 @@ function normalizeSecretValue(value: unknown, secretId: string): string {
 }
 
 export const secretService = {
-  createNew: async (data: CreateNewSecretSchemaType) => {
-    const environment = await environmentService.getByActorAndEnvironment(
-      data.actor,
-      data.environment,
-    );
+  createNew: async (data: CreateNewSecretSchemaType, requestContext: RequestContext) => {
+    
+    const environment = requestContext.environments.find((env) => {
+      if (env.type === data.environment) {
+        return env;
+      }
+    });
+
+    if (!environment) {
+      throw new InvalidOperationError(
+        `You do not have access to an environment of type ${data.environment}`,
+      );
+    }
 
     const providerModel = await secretProviderRepository.findById(
       data.providerId,
@@ -166,5 +174,32 @@ export const secretService = {
     }
 
     return await secretReferenceRepository.deleteById(secretId);
+  },
+
+  listAllSecrets: async (
+    providerId: string,
+    environment: EnvironmentType,
+    actor: z.infer<typeof ActorSchema>,
+  ) => {
+
+    
+    const providerModel = await secretProviderRepository.findById(
+      providerId,
+    );
+    if (!providerModel) {
+      throw new NotFoundError("Secret provider");
+    }
+
+    const ProviderClass = getProviderClass(providerModel.type);
+    const providerInstance = new ProviderClass(providerModel);
+    const result = await providerInstance.listAllSecrets();
+
+    if (!result) {
+      throw new InvalidOperationError(
+        "Failed to fetch secrets from provider",
+      );
+    }
+
+    return result;
   },
 };

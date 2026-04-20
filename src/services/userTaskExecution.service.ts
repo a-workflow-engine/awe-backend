@@ -68,6 +68,7 @@ export const userTaskService = {
 
   getPendingPaginated: async (
     actor: ActorModel,
+    asignee : string | undefined,
     environmentIds: string[],
     limit: number,
     offset: number,
@@ -83,6 +84,7 @@ export const userTaskService = {
     return await userTaskExecutionRepository.findByEnvironmentIdsAndStatusPaginated(
       filteredEnvironmentIds,
       TaskStatuses.IN_PROGRESS,
+      asignee,
       limit,
       offset,
     );
