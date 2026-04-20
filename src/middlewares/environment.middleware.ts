@@ -50,12 +50,12 @@ const assignEnvironmentContext = (
 };
 
 const getEnvironmentsForActor = async (req: Request) => {
-  if (req.actor.type === ActorTypes.API_KEY_CLIENT) {
-    const environment = await environmentService.getByActor(req.actor);
+  if (req.context.actor.type === ActorTypes.API_KEY_CLIENT) {
+    const environment = await environmentService.getByActor(req.context.actor);
     return [environment];
   }
 
-  return await environmentService.getAllByActor(req.actor);
+  return await environmentService.getAllByActor(req.context.actor);
 };
 
 export const resolveEnvironmentContextFromActor = async (
@@ -75,14 +75,16 @@ export const resolveEnvironmentContext = async (
 ) => {
   let environments;
 
-  if (req.actor.type === ActorTypes.API_KEY_CLIENT) {
+  if (req.context.actor.type === ActorTypes.API_KEY_CLIENT) {
     environments = await getEnvironmentsForActor(req);
   } else if (req.method === "GET") {
-    const requestEnvironments = parseEnvironmentsFromQuery(req.query.environment);
+    const requestEnvironments = parseEnvironmentsFromQuery(
+      req.query.environment,
+    );
 
     if (requestEnvironments.length > 0) {
       environments = await environmentService.getByActorAndEnvironments(
-        req.actor,
+        req.context.actor,
         requestEnvironments,
       );
 
@@ -95,7 +97,7 @@ export const resolveEnvironmentContext = async (
         ]);
       }
     } else {
-      environments = await environmentService.getAllByActor(req.actor);
+      environments = await environmentService.getAllByActor(req.context.actor);
     }
   } else if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
     const rawEnvironment = (req.body as { environment?: unknown }).environment;
@@ -121,7 +123,7 @@ export const resolveEnvironmentContext = async (
     );
 
     const environment = await environmentService.getByActorAndEnvironment(
-      req.actor,
+      req.context.actor,
       environmentType,
     );
     environments = [environment];
