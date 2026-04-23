@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { instanceService } from "../services/instance.service.js";
 import { taskService } from "../services/task.service.js";
 import { z } from "zod";
 
@@ -8,19 +7,21 @@ const TaskParamsSchema = z.object({
 });
 
 export const taskController = {
-  retryTask: async (req: Request, res: Response) => {
+  get: async (req: Request, res: Response) => {
+    const { taskId } = TaskParamsSchema.parse({ ...req.params });
+
+    const detail = await taskService.getDetail(
+      taskId,
+      req.context.environments,
+    );
+    return res.json(detail);
+  },
+
+  retry: async (req: Request, res: Response) => {
     const { taskId } = TaskParamsSchema.parse(req.params);
 
-    const task = await taskService.getByIdOrThrow(taskId);
-    const instanceId = task.instance_id;
+    const task = await taskService.retry(taskId, req.context.actor.id);
 
-    const instance = await instanceService.retry(
-      instanceId,
-      req.context.actor,
-      req.environmentIds,
-      taskId,
-    );
-
-    return res.json({ instance });
+    return res.json(task);
   },
 };

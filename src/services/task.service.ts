@@ -2,8 +2,10 @@ import { taskRepository } from "../repositories/task.repository.js";
 import type { DB, InstanceEventType, TaskStatus } from "../types/database.js";
 import type {
   DbTransaction,
+  EnvironmentModel,
   InstanceModel,
   NodeModel,
+  TaskExecutionModel,
   TaskModel,
 } from "../types/models.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
@@ -24,6 +26,10 @@ import { EngineError } from "../errors/EngineError.js";
 import { NodeSchema } from "../schemas/node.schema.js";
 import { DataIntegrityError } from "../errors/DataIntegrity.js";
 import { ContextSchema } from "../schemas/context.schema.js";
+import type { TaskDetail } from "../types/task.js";
+import { environmentUtils } from "../utils/environment.utils.js";
+import { Models } from "@google/genai";
+import { taskExecutionService } from "./taskExecution.service.js";
 
 const CONTEXT_REFERENCE_REGEX = /\bcontext\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
 const SECRET_REFERENCE_REGEX = /\bsecret\.([A-Za-z_][A-Za-z0-9_]*)\b/g;
@@ -145,21 +151,84 @@ async function scheduleNodeExecution(params: {
     nodeId: node.id,
   };
 
-  nodeSchema.type !== NodeTypes.USER
-    ? await queueService.enqueue({
-        jobData,
-        nodeConfiguration: nodeSchema.configuration,
-        ...(attemptsMade && { attemptsMade }),
-      })
-    : await userTaskService.create({
-        jobData,
-        nodeConfiguration: nodeSchema.configuration,
-        taskContext: taskService.getTaskContext(instance, node),
-        transaction,
-      });
+  if (nodeSchema.type !== NodeTypes.USER) {
+    await queueService.enqueue({
+      jobData,
+      nodeConfiguration: nodeSchema.configuration,
+      ...(attemptsMade && { attemptsMade }),
+    });
+    return undefined;
+  }
+
+  const models = await userTaskService.create({
+    jobData,
+    nodeConfiguration: nodeSchema.configuration,
+    taskContext: taskService.getTaskContext(instance, node),
+    transaction,
+  });
+  return models.taskExecution;
 }
 
 export const taskService = {
+  getDetail: async (
+    taskId: string,
+    environments: EnvironmentModel[],
+  ): Promise<TaskDetail> => {
+    const [taskModels, executions] = await Promise.all([
+      taskRepository.findByIdAndEnvironmentIdsWithNode(
+        taskId,
+        environmentUtils.getEnvironmentIds(environments),
+      ),
+      taskExecutionService.getByTaskIdWithUserTask(taskId),
+    ]);
+
+    if (!taskModels) {
+      throw new NotFoundError("Task");
+    }
+
+    const { task } = taskModels;
+    const node = converterUtils.parseOrThrow(NodeSchema, taskModels.node);
+
+    return {
+      id: task.id,
+      instanceId: task.instance_id,
+      status: task.status,
+      createdAt: task.created_on,
+
+      node: {
+        id: node.id,
+        type: node.type,
+        configuration: node.configuration,
+      },
+
+      executions: executions.map((execution) => {
+        const { taskExecution, userTaskExecution } = execution;
+
+        return {
+          id: taskExecution.id,
+          status: taskExecution.status,
+          startedAt: taskExecution.created_on,
+          endedAt: taskExecution.ended_on,
+
+          inputVariables: converterUtils.parseOrThrow(
+            ContextSchema,
+            taskExecution.input_variables,
+          ),
+          outputVariables: converterUtils.jsonValueToObject(
+            taskExecution.output_variables,
+          ),
+
+          ...(userTaskExecution
+            ? {
+                title: userTaskExecution.title,
+                assignee: userTaskExecution.assignee,
+              }
+            : { title: null, assignee: null }),
+        };
+      }),
+    };
+  },
+
   getByIdOrThrow: async (taskId: string): Promise<TaskModel> => {
     const task = await taskRepository.findById(taskId);
     if (!task) {
@@ -169,35 +238,12 @@ export const taskService = {
     return task;
   },
 
-  getAllTaskDetails: async (
-    taskId: string,
-  ): Promise<{ instance: InstanceModel; node: NodeModel; task: TaskModel }> => {
-    const task = await taskRepository.findById(taskId);
-    if (!task) {
-      throw new NotFoundError("task");
-    }
-
-    const [instance, node] = await Promise.all([
-      instanceRepository.findById(task.instance_id),
-      nodeRepository.findById(task.node_id),
-    ]);
-
-    if (!instance) {
-      throw new NotFoundError("instance");
-    }
-    if (!node) {
-      throw new NotFoundError("node");
-    }
-
-    return { instance, node, task };
-  },
-
   create: async (params: {
     instance: InstanceModel;
     node: NodeModel;
     taskStatus?: TaskStatus;
     transaction: DbTransaction;
-  }): Promise<TaskModel> => {
+  }) => {
     if (!params.taskStatus) {
       params.taskStatus = params.instance.auto_advance
         ? TaskStatuses.IN_PROGRESS
@@ -224,8 +270,10 @@ export const taskService = {
       transaction,
     );
 
+    let taskExecution: TaskExecutionModel | undefined = undefined;
+
     if (taskStatus === TaskStatuses.IN_PROGRESS) {
-      await scheduleNodeExecution({
+      taskExecution = await scheduleNodeExecution({
         instance,
         task,
         node,
@@ -242,14 +290,14 @@ export const taskService = {
       });
     }
 
-    return task;
+    return { task, taskExecution };
   },
 
   resume: async (
     node: NodeModel,
     instance: InstanceModel,
     transaction: Transaction<DB>,
-  ): Promise<TaskModel> => {
+  ) => {
     let task = await taskRepository.findByStatusAndInstanceId(
       instance.id,
       TaskStatuses.PAUSED,
@@ -276,45 +324,46 @@ export const taskService = {
       transaction,
     );
 
-    await scheduleNodeExecution({ instance, task, node, transaction });
-    return task;
+    const taskExecution = await scheduleNodeExecution({
+      instance,
+      task,
+      node,
+      transaction,
+    });
+    return { task, taskExecution };
   },
 
-  retry: async (
-    taskId: string,
-    instance: InstanceModel,
-    node: NodeModel,
-    actorId: string,
-    transaction: Transaction<DB>,
-  ): Promise<TaskModel> => {
-    let task = await taskRepository.findById(taskId, transaction);
+  retry: async (taskId: string, actorId: string): Promise<TaskModel> => {
+    let task = await taskRepository.findById(taskId);
     if (!task) {
       throw new NotFoundError("task");
     }
 
-    if (task.status !== TaskStatuses.FAILED) {
-      throw new StateTransitionError("Only failed tasks can be retried");
-    }
-
-    task = await taskRepository.updateById(
-      task.id,
-      {
-        status: TaskStatuses.IN_PROGRESS,
-      },
-      transaction,
-    );
-
-    await eventLogService.createTaskLog(
-      instance.id,
-      task.id,
-      LogEventTypes.RETRIED,
-      { message: "Manual retry of failed task" },
-      actorId,
-      transaction,
-    );
-
-    await scheduleNodeExecution({ instance, task, node, transaction });
     return task;
+
+    // if (task.status !== TaskStatuses.FAILED) {
+    //   throw new StateTransitionError("Only failed tasks can be retried");
+    // }
+
+    // task = await taskRepository.updateById(
+    //   task.id,
+    //   {
+    //     status: TaskStatuses.IN_PROGRESS,
+    //   },
+    //   transaction,
+    // );
+
+    // await eventLogService.createTaskLog(
+    //   instance.id,
+    //   task.id,
+    //   LogEventTypes.RETRIED,
+    //   { message: "Manual retry of failed task" },
+    //   actorId,
+    //   transaction,
+    // );
+
+    // await scheduleNodeExecution({ instance, task, node, transaction });
+    // return task;
   },
 
   getTaskContext: (instance: InstanceModel, node: NodeModel): Context => {

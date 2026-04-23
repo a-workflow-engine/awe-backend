@@ -13,7 +13,7 @@ export const userTaskController = {
     const { items, total } = await userTaskService.getPendingPaginated(
       req.context.actor,
       assignee,
-      req.environmentIds,
+      req.context.environments,
       limit,
       offset,
     );
@@ -26,7 +26,7 @@ export const userTaskController = {
     const task = await userTaskService.get(
       taskId,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
     return res.json({ ...task });
   },
@@ -39,7 +39,7 @@ export const userTaskController = {
       taskId,
       userInput,
       req.context.actor,
-      req.environmentIds,
+      req.context.environments,
     );
     return res.json({
       status: taskExecution.status,
