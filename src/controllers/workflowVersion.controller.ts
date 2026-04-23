@@ -70,6 +70,7 @@ export const workflowVersionController = {
 
     return res.status(201).json({
       id: workflowVersion.id,
+      workflowId: workflowVersion.workflow_id,
       status: workflowVersion.status,
       createdAt: workflowVersion.created_on,
       valid: result.valid,
@@ -137,6 +138,7 @@ export const workflowVersionController = {
     );
 
     return res.status(200).json({
+      
       valid: result.valid,
       errors: result.errors,
       status: workflowVersion.status,

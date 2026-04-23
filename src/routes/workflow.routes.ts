@@ -25,12 +25,6 @@ workflowRouter.post(
 );
 
 workflowRouter.post(
-  "/:workflowId/draft",
-  resolveEnvironmentContextFromActor,
-  workflowVersionController.create,
-);
-
-workflowRouter.post(
   "/:workflowId/versions",
   resolveEnvironmentContextFromActor,
   workflowVersionController.create,

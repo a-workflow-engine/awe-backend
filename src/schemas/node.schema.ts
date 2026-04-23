@@ -53,19 +53,19 @@ export const SecretDataMapSchema = z.object({
 });
 
 export const StartNodeConfigurationSchema = z.object({
-  inputDataMap: z.array(StartNodeDataMapSchema),
-  fetchables: z.array(FetchableSchema),
+  inputDataMap: z.array(StartNodeDataMapSchema).default([]),
+  fetchables: z.array(FetchableSchema).default([]),
   secretDataMap: z.array(SecretDataMapSchema).default([]),
 });
 
 export const EndNodeConfigurationSchema = z.object({
-  success: z.boolean(),
+  success: z.boolean().default(true),
   resultMap: z.array(
     z.object({
       variableName: z.string(),
       valueExpression: z.string(),
     }),
-  ),
+  ).default([]),
   message: z.string().optional(),
 });
 
