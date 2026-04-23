@@ -1,5 +1,11 @@
 import type { Insertable, Updateable } from "kysely";
-import type { NodeType, Task, TaskExecution, TaskStatus } from "./database.js";
+import type {
+  InstanceStatus,
+  NodeType,
+  Task,
+  TaskExecution,
+  TaskStatus,
+} from "./database.js";
 import type { Context } from "./engine.js";
 import type { NodeConfiguration } from "./workflow.js";
 
@@ -38,4 +44,22 @@ export type TaskDetail = {
 
   node: TaskDetailNode;
   executions: TaskDetailExecution[];
+};
+
+export type TaskRetryDetail = {
+  id: string;
+  executionId: string | null;
+  status: TaskStatus;
+  inputVariables: Context;
+  createdAt: Date;
+
+  instance: {
+    id: string;
+    status: InstanceStatus;
+  };
+
+  node: {
+    id: string;
+    type: NodeType;
+  };
 };

@@ -3,19 +3,19 @@ import type { TaskStatus } from "../types/database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
   DbTransaction,
+  InstanceModel,
   NodeModel,
   TaskExecutionModel,
   TaskModel,
-  UserTaskExecutionModel,
 } from "../types/models.js";
 import { columnMapper } from "./utils/columnMapper.util.js";
 import {
+  instanceColumns,
   nodeColumns,
   taskColumns,
   taskExecutionColumns,
-  userTaskExecutionColumns,
 } from "../types/columnNames.js";
-import type { NewTask, TaskDetail, UpdateTask } from "../types/task.js";
+import type { NewTask, UpdateTask } from "../types/task.js";
 
 export const taskRepository = {
   findById: async (
@@ -46,13 +46,14 @@ export const taskRepository = {
       .executeTakeFirst();
   },
 
-  findByIdAndEnvironmentIdsWithNode: async (
+  findByIdAndEnvironmentIdsWithRelations: async (
     taskId: string,
     environmentIds: string[],
   ): Promise<
     | {
         task: TaskModel;
         node: NodeModel;
+        instance: InstanceModel;
       }
     | undefined
   > => {
@@ -73,6 +74,7 @@ export const taskRepository = {
       .select((eb) => [
         ...columnMapper.prefixedColumns(eb, "task", taskColumns),
         ...columnMapper.prefixedColumns(eb, "node", nodeColumns),
+        ...columnMapper.prefixedColumns(eb, "instance", instanceColumns),
       ])
       .where("workflow.environment_id", "in", environmentIds)
       .where("task.id", "=", taskId)
@@ -85,8 +87,10 @@ export const taskRepository = {
     return {
       task: columnMapper.extractPrefixed<TaskModel>(result, "task"),
       node: columnMapper.extractPrefixed<NodeModel>(result, "node"),
+      instance: columnMapper.extractPrefixed<InstanceModel>(result, "instance"),
     };
   },
+
   findLatestByInstanceIdWithRelations: async (instanceId: string) => {
     const result = await db
       .selectFrom("task")

@@ -23,9 +23,9 @@ export const instanceController = {
       req.context.environments,
     );
 
-    return res.json(
-      buildPaginatedResponse("instances", items, total, page, limit),
-    );
+    return res
+      .status(200)
+      .json(buildPaginatedResponse("instances", items, total, page, limit));
   },
 
   create: async (req: Request, res: Response) => {
@@ -43,7 +43,7 @@ export const instanceController = {
     const { instanceId } = InstanceParamsSchema.parse(req.params);
     const instanceDetail = await instanceService.get(
       instanceId,
-      req.context.environments.map((env) => env),
+      req.context.environments,
     );
 
     return res.status(200).json(instanceDetail);
@@ -56,7 +56,7 @@ export const instanceController = {
       req.context.actor,
       req.context.environments,
     );
-    return res.json(instanceDetail);
+    return res.status(200).json(instanceDetail);
   },
 
   pause: async (req: Request, res: Response) => {
@@ -66,7 +66,7 @@ export const instanceController = {
       req.context.actor,
       req.context.environments,
     );
-    return res.json(instanceDetail);
+    return res.status(200).json(instanceDetail);
   },
 
   terminate: async (req: Request, res: Response) => {
@@ -76,7 +76,7 @@ export const instanceController = {
       req.context.actor,
       req.context.environments,
     );
-    return res.json(instanceDetail);
+    return res.status(200).json(instanceDetail);
   },
 
   getExecutionSequence: async (req: Request, res: Response) => {
@@ -85,6 +85,6 @@ export const instanceController = {
       instanceId,
       req.context.environments,
     );
-    return res.json({ sequence });
+    return res.status(200).json({ sequence });
   },
 };

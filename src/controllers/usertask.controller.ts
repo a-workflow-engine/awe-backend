@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { userTaskService } from "../services/userTaskExecution.service.js";
-import { UserTaskParamsSchema } from "../schemas/task.schema.js";
+import { TaskParamsSchema } from "../schemas/task.schema.js";
 import {
   buildPaginatedResponse,
   parsePaginationFromRequest,
@@ -22,7 +22,7 @@ export const userTaskController = {
   },
 
   getTask: async (req: Request, res: Response) => {
-    const { taskId } = UserTaskParamsSchema.parse(req.params);
+    const { taskId } = TaskParamsSchema.parse(req.params);
     const task = await userTaskService.get(
       taskId,
       req.context.actor,
@@ -32,7 +32,7 @@ export const userTaskController = {
   },
 
   completeUserTask: async (req: Request, res: Response) => {
-    const { taskId } = UserTaskParamsSchema.parse(req.params);
+    const { taskId } = TaskParamsSchema.parse(req.params);
     const userInput = req.body ?? {};
     delete userInput.environment;
     const { taskExecution } = await userTaskService.completeUserTask(

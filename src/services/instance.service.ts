@@ -38,6 +38,7 @@ import type { InstanceDetail, InstanceListItem } from "../types/instance.js";
 import { buildExecutionSequence } from "../utils/nodePath.utils.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 import type { ExecutionSequenceResponse } from "../types/nodePath.js";
+import type { Context } from "../types/engine.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -430,6 +431,48 @@ export const instanceService = {
       },
       transaction,
     );
+  },
+
+  updateContextForRetry: async (
+    instance: InstanceModel,
+    patchContext: Record<string, unknown>,
+    actor: ActorModel,
+    transaction: DbTransaction,
+  ) => {
+    if (
+      instance.status !== InstanceStatuses.FAILED &&
+      instance.status !== InstanceStatuses.TERMINATED
+    ) {
+      throw new StateTransitionError(
+        `Instance has not failed or terminated. Status is ${instance.status}`,
+      );
+    }
+
+    const instanceContext = instance.current_variables
+      ? converterUtils.parseOrThrow(ContextSchema, instance.current_variables)
+      : {
+          constants: converterUtils.jsonValueToObject(instance.input_variables),
+          fetchables: {},
+          urls: {},
+          secrets: {},
+        };
+
+    const mergedContext: Context = {
+      ...instanceContext,
+      constants: {
+        ...instanceContext.constants,
+        ...(patchContext ?? {}),
+      },
+    };
+
+    return await updateInstanceStatus({
+      instanceId: instance.id,
+      status: InstanceStatuses.IN_PROGRESS,
+      actorId: actor.id,
+      currentVariables: mergedContext,
+      details: { message: "Retry task" },
+      transaction,
+    });
   },
 
   getExecutionSequence: async (
