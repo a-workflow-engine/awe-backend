@@ -51,7 +51,8 @@ export const workflowService = {
     actor: ActorModel,
     environments: EnvironmentModel[],
   ) => {
-    if (!environments.find((env) => env.type === data.environment)) {
+    const environment = environments.find((env) => env.type === data.environment);
+    if (!environment) {
       throw new NotFoundError("Environment");
     }
 
@@ -62,7 +63,7 @@ export const workflowService = {
       name: data.name,
       description: data.description,
       created_by: actor.id,
-      environment_id: data.environment,
+      environment_id: environment.id,
       base_workflow_id: workflowId,
       modified_by: actor.id,
     });
