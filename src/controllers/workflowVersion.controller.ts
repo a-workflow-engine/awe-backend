@@ -155,6 +155,7 @@ export const workflowVersionController = {
       status: workflowVersion.status,
       publishedAt: workflowVersion.published_on,
     });
+    
   },
 
   activate: async (req: Request, res: Response) => {
