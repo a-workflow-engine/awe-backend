@@ -1,0 +1,12 @@
+src/
+tests/
+scripts/
+.env
+.env.*
+tsconfig.json
+tsconfig*.json
+jest.config.*
+*.test.ts
+.github/
+.platform/
+README.md
