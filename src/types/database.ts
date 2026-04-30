@@ -80,10 +80,7 @@ export interface Edge {
 }
 
 export interface Environment {
-  created_on: Generated<Timestamp>;
-  deleted_on: Timestamp | null;
   id: Generated<string>;
-  is_deleted: Generated<boolean>;
   organization_id: string;
   type: EnvironmentType;
 }

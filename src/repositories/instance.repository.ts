@@ -207,7 +207,6 @@ export const instanceRepository = {
         .where("instance.is_deleted", "=", false)
         .where("workflow_version.is_deleted", "=", false)
         .where("workflow.is_deleted", "=", false)
-        .where("environment.is_deleted", "=", false)
         .orderBy("instance.created_on", "desc")
         .limit(limit)
         .execute()) as unknown as InstanceListItem[];
