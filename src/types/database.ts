@@ -164,7 +164,7 @@ export interface SecretProvider {
 }
 
 export interface SecretReference {
-  created_on: Generated<Timestamp | null>;
+  created_on: Generated<Timestamp>;
   environment_id: string;
   id: Generated<string>;
   label: string;
@@ -214,11 +214,8 @@ export interface Workflow {
 export interface WorkflowVersion {
   created_by: string;
   created_on: Generated<Timestamp>;
-  deleted_by: string | null;
-  deleted_on: Timestamp | null;
   description: string | null;
   id: Generated<string>;
-  is_deleted: Generated<boolean>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
   published_on: Timestamp | null;
