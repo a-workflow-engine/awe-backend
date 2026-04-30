@@ -28,7 +28,7 @@ export const taskColumns = ["created_on","id","instance_id","node_id","status"] 
 
 export const taskExecutionColumns = ["created_on","ended_on","id","input_variables","output_variables","status","task_id"] as const satisfies (keyof TaskExecution)[];
 
-export const userTaskExecutionColumns = ["assignee","created_on","id","task_execution_id","title"] as const satisfies (keyof UserTaskExecution)[];
+export const userTaskExecutionColumns = ["assignee","task_execution_id","title"] as const satisfies (keyof UserTaskExecution)[];
 
 export const workflowColumns = ["base_workflow_id","created_by","created_on","deleted_by","deleted_on","description","environment_id","id","is_deleted","modified_by","modified_on","name"] as const satisfies (keyof Workflow)[];
 

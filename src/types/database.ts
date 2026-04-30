@@ -192,8 +192,6 @@ export interface TaskExecution {
 
 export interface UserTaskExecution {
   assignee: string | null;
-  created_on: Generated<Timestamp>;
-  id: Generated<string>;
   task_execution_id: string;
   title: string | null;
 }

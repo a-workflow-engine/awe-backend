@@ -180,7 +180,9 @@ export const taskExecutionRepository = {
             eb.ref("node.client_id").as("node_client_id"),
             eb.ref("node.type").as("node_type"),
             eb.ref("node.name").as("node_name"),
-            eb.ref("user_task_execution.id").as("user_task_execution_id"),
+            eb
+              .ref("user_task_execution.task_execution_id")
+              .as("user_task_execution_id"),
           ])
           .where("task.instance_id", "=", instanceId)
           .orderBy("task_execution.created_on", "asc")
