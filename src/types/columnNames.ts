@@ -26,7 +26,7 @@ export const secretReferenceColumns = ["created_on","environment_id","id","label
 
 export const taskColumns = ["created_on","id","instance_id","node_id","status"] as const satisfies (keyof Task)[];
 
-export const taskExecutionColumns = ["created_on","ended_on","id","input_variables","output_variables","started_on","status","task_id"] as const satisfies (keyof TaskExecution)[];
+export const taskExecutionColumns = ["created_on","ended_on","id","input_variables","output_variables","status","task_id"] as const satisfies (keyof TaskExecution)[];
 
 export const userTaskExecutionColumns = ["assignee","created_on","id","task_execution_id","title"] as const satisfies (keyof UserTaskExecution)[];
 

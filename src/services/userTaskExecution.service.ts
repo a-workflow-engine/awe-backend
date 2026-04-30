@@ -155,7 +155,7 @@ export const userTaskService = {
       id: userTaskExecution.id,
       title: userTaskExecution.title,
       assignee: userTaskExecution.assignee,
-      startedAt: taskExecution.started_on,
+      startedAt: taskExecution.created_on,
       status: taskExecution.status,
       requestData,
       responseData,

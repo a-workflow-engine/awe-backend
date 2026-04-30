@@ -186,7 +186,6 @@ export interface TaskExecution {
   id: Generated<string>;
   input_variables: Json | null;
   output_variables: Json | null;
-  started_on: Timestamp | null;
   status: TaskStatus;
   task_id: string;
 }

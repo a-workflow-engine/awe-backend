@@ -173,7 +173,7 @@ export const taskExecutionRepository = {
             eb.ref("task_execution.id").as("id"),
             eb.ref("task_execution.task_id").as("task_id"),
             eb.ref("task_execution.status").as("status"),
-            eb.ref("task_execution.started_on").as("started_on"),
+            eb.ref("task_execution.created_on").as("started_on"),
             eb.ref("task_execution.ended_on").as("ended_on"),
             eb.ref("task_execution.created_on").as("created_on"),
             eb.ref("node.id").as("node_id"),
