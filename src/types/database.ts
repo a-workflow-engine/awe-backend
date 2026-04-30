@@ -155,12 +155,12 @@ export interface RefreshToken {
 
 export interface SecretProvider {
   configuration: Json;
-  created_on: Generated<Timestamp | null>;
+  created_on: Generated<Timestamp>;
   id: Generated<string>;
-  label: string | null;
+  label: string;
+  modified_on: Generated<Timestamp>;
   organization_id: string;
   type: SecretProviderType;
-  updated_on: Generated<Timestamp | null>;
 }
 
 export interface SecretReference {
