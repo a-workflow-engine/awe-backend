@@ -6,7 +6,7 @@ export const actorColumns = ["id","type"] as const satisfies (keyof Actor)[];
 
 export const apiKeyColumns = ["actor_id","created_on","deleted_on","environment_id","id","is_deleted","is_revoked","key_hash","key_prefix","label","modified_on","revoked_on"] as const satisfies (keyof ApiKey)[];
 
-export const edgeColumns = ["client_id","condition_expression","created_by","created_on","deleted_by","deleted_on","destination_node_id","id","is_deleted","modified_by","modified_on","name","rule_id","source_node_id"] as const satisfies (keyof Edge)[];
+export const edgeColumns = ["client_id","created_by","created_on","deleted_by","deleted_on","destination_node_id","id","is_deleted","modified_by","modified_on","name","rule_id","source_node_id"] as const satisfies (keyof Edge)[];
 
 export const environmentColumns = ["created_on","deleted_on","id","is_deleted","organization_id","type"] as const satisfies (keyof Environment)[];
 

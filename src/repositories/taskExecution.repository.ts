@@ -146,7 +146,7 @@ export const taskExecutionRepository = {
             "e.destination_node_id",
           )
           .select((eb) => [
-            eb.ref("e.condition_expression").as("condition_expression"),
+            eb.ref("e.client_id").as("condition_expression"),
             eb.ref("e.source_node_id").as("source_node_id"),
             eb.ref("e.destination_node_id").as("destination_node_id"),
             eb.ref("destination.client_id").as("destination_node_client_id"),

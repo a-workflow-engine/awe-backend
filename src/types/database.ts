@@ -65,7 +65,6 @@ export interface ApiKey {
 
 export interface Edge {
   client_id: string;
-  condition_expression: string | null;
   created_by: string;
   created_on: Generated<Timestamp>;
   deleted_by: string | null;
