@@ -14,7 +14,7 @@ export const instanceColumns = ["auto_advance","control_signal","created_by","cr
 
 export const instanceLogColumns = ["created_by","created_on","details","entity_id","entity_type","event_type","id","instance_id"] as const satisfies (keyof InstanceLog)[];
 
-export const nodeColumns = ["client_id","configuration","created_by","created_on","deleted_by","deleted_on","description","id","input_schema","is_deleted","max_attempts","modified_by","modified_on","name","output_schema","type","workflow_version_id","x_coordinate","y_coordinate"] as const satisfies (keyof Node)[];
+export const nodeColumns = ["client_id","configuration","created_by","created_on","deleted_by","deleted_on","description","id","input_schema","is_deleted","modified_by","modified_on","name","output_schema","type","workflow_version_id","x_coordinate","y_coordinate"] as const satisfies (keyof Node)[];
 
 export const organizationColumns = ["actor_id","created_on","deleted_on","email","id","is_deleted","modified_on","name","password_hash"] as const satisfies (keyof Organization)[];
 

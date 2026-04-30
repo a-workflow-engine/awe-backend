@@ -125,13 +125,12 @@ export interface Node {
   deleted_on: Timestamp | null;
   description: string | null;
   id: Generated<string>;
-  input_schema: Json | null;
+  input_schema: Json;
   is_deleted: Generated<boolean>;
-  max_attempts: Generated<number>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
   name: string | null;
-  output_schema: Json | null;
+  output_schema: Json;
   type: NodeType;
   workflow_version_id: string;
   x_coordinate: number | null;
