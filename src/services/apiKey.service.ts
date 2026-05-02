@@ -24,10 +24,6 @@ export const apiKeyService = {
     actor: ActorModel,
     environments: EnvironmentModel[],
   ): Promise<ApiKeyModel[]> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
-      throw new AuthError();
-    }
-
     if (environments.length === 0) {
       return [];
     }
@@ -46,10 +42,6 @@ export const apiKeyService = {
     apiKey: ApiKeyModel;
     environment: EnvironmentModel;
   }> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
-      throw new AuthError();
-    }
-
     const selectedEnvironment = environments.find(
       (env) => env.type === data.environment,
     );
@@ -101,10 +93,6 @@ export const apiKeyService = {
     actor: ActorModel,
     environments: EnvironmentModel[],
   ): Promise<ApiKeyModel> => {
-    if (actor.type !== ActorTypes.ORGANIZATION_ACCOUNT) {
-      throw new AuthError();
-    }
-
     const apiKey = await apiKeyRepository.findById(id);
 
     if (
