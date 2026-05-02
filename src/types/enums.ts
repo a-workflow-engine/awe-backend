@@ -121,3 +121,8 @@ export enum ScriptExecutionService {
   JDOODLE = "jdoodle",
   GEMINI = "gemini",
 }
+
+export enum ApiKeyStatus {
+  ACTIVE = "active",
+  REVOKED = "revoked",
+}
