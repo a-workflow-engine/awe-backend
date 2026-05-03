@@ -17,8 +17,3 @@ export const EnvironmentQuerySchema = z
       .default([]),
   })
   .transform((obj) => obj.environment);
-
-export const EnvironmentConfigurationSchema = z.object({
-  selectedEnvironmentType: EnvironmentTypeSchema.optional(),
-  allowedEnvironments: z.array(EnvironmentSchema),
-});

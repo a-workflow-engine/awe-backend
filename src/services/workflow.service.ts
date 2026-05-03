@@ -3,35 +3,40 @@ import { workflowRepository } from "../repositories/workflow.repository.js";
 import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import type { ActorModel, EnvironmentModel } from "../types/models.js";
 import { randomUUID } from "crypto";
-import type z from "zod";
 import type {
-  WorkflowGroupCreateSchema,
-  WorkflowGroupUpdateSchema,
+  CreateWorkflowInput,
+  ListWorkflowInput,
+  UpdateWorkflowInput,
 } from "../schemas/workflow.schema.js";
-
-type CreateWorkflowInput = z.infer<typeof WorkflowGroupCreateSchema>;
-
-type UpdateWorkflowInput = z.infer<typeof WorkflowGroupUpdateSchema>;
-
-export type WorkflowListQuery = {
-  search?: string;
-  createdSort?: "asc" | "desc";
-};
+import { paginationUtils } from "../utils/pagination.utils.js";
+import { environmentUtils } from "../utils/environment.utils.js";
 
 export const workflowService = {
-  getAllPaginated: async (
-    environmentIds: string[],
-    limit: number,
-    offset: number,
-    query?: WorkflowListQuery,
+  getPaginated: async (
+    data: ListWorkflowInput,
+    environments: EnvironmentModel[],
   ) => {
-    return await workflowRepository.findByEnvironmentIdsWithLatestVersionPaginated(
-      environmentIds,
-      limit,
-      offset,
-      query?.search,
-      query?.createdSort ?? "desc",
+    const result = await workflowRepository.findByWithLatestVersionPaginated({
+      offset: paginationUtils.getOffset(data.page, data.limit),
+      limit: data.limit,
+      search: data.search,
+      createdSort: data.createdSort,
+      environmentIds: environmentUtils.getFilteredEnvironmentIds(
+        environments,
+        data.environmentTypes,
+      ),
+    });
+
+    const pagination = paginationUtils.getPaginationResponse(
+      result.items.length,
+      data.page,
+      data.limit,
     );
+
+    return {
+      workflows: result.items,
+      pagination,
+    };
   },
 
   get: async (workflowId: string, environmentIds: string[]) => {

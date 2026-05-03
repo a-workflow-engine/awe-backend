@@ -15,7 +15,12 @@ import {
   DefaultRuleSchema,
   BackoffSchema,
 } from "../schemas/node.schema.js";
-import type { NodeType } from "./database.js";
+import type {
+  ActorType,
+  EnvironmentType,
+  NodeType,
+  WorkflowVersionStatus,
+} from "./database.js";
 import { NodeTypes } from "./enums.js";
 
 export type StartNodeConfiguration = z.infer<
@@ -77,3 +82,20 @@ export type DecisionNodeRule = z.infer<typeof RuleSchema>;
 export type DecisionNodeDefaultRule = z.infer<typeof DefaultRuleSchema>;
 
 export type BackoffSettings = z.infer<typeof BackoffSchema>;
+
+export type WorkflowListItem = {
+  id: string;
+  name: string;
+  description: string | null;
+
+  environment: EnvironmentType;
+
+  modifiedAt: Date;
+  modifiedBy: ActorType;
+
+  latestVersion: {
+    id: string;
+    version: string | null;
+    status: WorkflowVersionStatus;
+  } | null;
+};

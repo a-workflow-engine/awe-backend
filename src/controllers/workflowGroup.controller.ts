@@ -2,9 +2,10 @@ import type { Request, Response } from "express";
 import { workflowService } from "../services/workflow.service.js";
 import {
   WorkflowDefinitionValidateSchema,
-  WorkflowGroupCreateSchema,
-  WorkflowGroupUpdateSchema,
+  WorkflowCreateRequestSchema,
+  WorkflowUpdateRequestSchema,
   WorkflowIdSchema,
+  WorkflowListRequestSchema,
 } from "../schemas/workflow.schema.js";
 import { workflowValidatorService } from "../services/workflowValidator.service.js";
 import {
@@ -14,14 +15,9 @@ import {
 import { z } from "zod";
 import { environmentUtils } from "../utils/environment.utils.js";
 
-const WorkflowListQuerySchema = z.object({
-  search: z.string().trim().optional(),
-  createdSort: z.enum(["asc", "desc"]).default("desc"),
-});
-
 export const workflowGroupController = {
   create: async (req: Request, res: Response) => {
-    const data = WorkflowGroupCreateSchema.parse(req.body);
+    const data = WorkflowCreateRequestSchema.parse(req.body);
 
     const workflow = await workflowService.create(
       data,
@@ -40,56 +36,18 @@ export const workflowGroupController = {
   },
 
   list: async (req: Request, res: Response) => {
-    const { page, limit, offset } = parsePaginationFromRequest(req);
-    const { search, createdSort } = WorkflowListQuerySchema.parse(req.query);
-    const listQuery = {
-      createdSort,
-      ...(search ? { search } : {}),
-    };
+    const data = WorkflowListRequestSchema.parse(req.query);
 
-    const { items, total } = await workflowService.getAllPaginated(
-      environmentUtils.getEnvironmentIds(req.context.environments),
-      limit,
-      offset,
-      listQuery,
+    const result = await workflowService.getPaginated(
+      data,
+      req.context.environments,
     );
 
-    const formattedWorkflows = items.map(
-      ({ workflow, status, latestVersionId, latestVersionNumber }) => {
-        const environment = req.context.environments.find(
-          (env) => env.id === workflow.environment_id,
-        );
-        return {
-          id: workflow.id,
-          name: workflow.name,
-          description: workflow.description,
-          latestVersion: {
-            latestVersionId: latestVersionId,
-            status: status,
-            latestVersionNumber: latestVersionNumber,
-          },
-          environment: environment?.type ?? "unknown",
-          createdAt: workflow.created_on,
-          updatedAt: workflow.modified_on,
-        };
-      },
-    );
-
-    res
-      .status(200)
-      .json(
-        buildPaginatedResponse(
-          "workflows",
-          formattedWorkflows,
-          total,
-          page,
-          limit,
-        ),
-      );
+    res.status(200).json(result);
   },
 
   update: async (req: Request, res: Response) => {
-    const data = WorkflowGroupUpdateSchema.parse({
+    const data = WorkflowUpdateRequestSchema.parse({
       ...req.params,
       ...req.body,
     });
@@ -122,8 +80,9 @@ export const workflowGroupController = {
       name: workflow.name,
       description: workflow.description,
       environment:
-        req.context.environments.find((env) => env.id === workflow.environment_id)
-          ?.type ?? "unknown",
+        req.context.environments.find(
+          (env) => env.id === workflow.environment_id,
+        )?.type ?? "unknown",
       createdAt: workflow.created_on,
       updatedAt: workflow.modified_on,
 

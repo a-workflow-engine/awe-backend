@@ -4,6 +4,8 @@ import type { Insertable, Updateable } from "kysely";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type { DbTransaction, WorkflowModel } from "../types/models.js";
 import type { WorkflowVersionStatus } from "../types/database.js";
+import type { CreatedSort } from "../types/enums.js";
+import type { WorkflowListItem } from "../types/workflow.js";
 
 type NewWorkflow = Insertable<Workflow>;
 type UpdateWorkflow = Updateable<Workflow>;
@@ -156,34 +158,59 @@ export const workflowRepository = {
     return result ? Number(result.count) : 0;
   },
 
-  findByEnvironmentIdsWithLatestVersionPaginated: async (
-    environmentIds: string[],
-    limit: number,
-    offset: number,
-    search?: string,
-    createdSort: "asc" | "desc" = "desc",
-    transaction?: DbTransaction,
-  ): Promise<{
-    items: Array<{
-      workflow: WorkflowModel;
-      status: WorkflowVersionStatus | null;
-      latestVersionId: string | null;
-      latestVersionNumber: number | null;
-    }>;
+  findByWithLatestVersionPaginated: async (data: {
+    offset: number;
+    limit: number;
+    search: string | undefined;
+    createdSort: CreatedSort;
+    environmentIds: string[];
+  }): Promise<{
+    items: WorkflowListItem[];
     total: number;
   }> => {
-    if (environmentIds.length === 0) {
+    if (data.environmentIds.length === 0) {
       return { items: [], total: 0 };
     }
 
-    const dbConn = transaction ?? db;
-
-    const normalizedSearch = search?.trim();
-    let workflowsQuery = dbConn
+    const normalizedSearch = data.search?.trim();
+    let workflowsQuery = db
       .selectFrom("workflow")
-      .selectAll()
-      .where("environment_id", "in", environmentIds)
-      .where("is_deleted", "=", false);
+      .innerJoin("environment", "environment.id", "workflow.environment_id")
+      .innerJoin("actor", "actor.id", "workflow.modified_by")
+      .leftJoin(
+        db
+          .selectFrom("workflow_version")
+          .select([
+            "workflow_version.id",
+            "workflow_version.workflow_id",
+            "workflow_version.version",
+            "workflow_version.status",
+          ])
+          .distinctOn("workflow_version.workflow_id")
+          .orderBy("workflow_version.workflow_id")
+          .orderBy("workflow_version.modified_on", "desc")
+          .as("wv"),
+        (join) => join.onRef("wv.workflow_id", "=", "workflow.id"),
+      )
+      .select((eb) => [
+        eb.ref("workflow.id").as("workflow_id"),
+        eb.ref("workflow.name").as("workflow_name"),
+        eb.ref("workflow.description").as("workflow_description"),
+        eb.ref("workflow.modified_on").as("workflow_modified_on"),
+
+        eb.ref("wv.id").as("workflow_version_id"),
+        eb.ref("wv.version").as("workflow_version_version"),
+        eb.ref("wv.status").as("workflow_version_status"),
+
+        eb.ref("environment.type").as("environment_type"),
+        eb.ref("actor.type").as("actor_type"),
+        eb.fn.countAll().over().as("total_count"),
+      ])
+      .orderBy("workflow.created_on", data.createdSort)
+      .limit(data.limit)
+      .offset(data.offset)
+      .where("workflow.environment_id", "in", data.environmentIds)
+      .where("workflow.is_deleted", "=", false);
 
     if (normalizedSearch) {
       const searchPattern = `%${normalizedSearch}%`;
@@ -195,73 +222,27 @@ export const workflowRepository = {
       );
     }
 
-    const workflows = await workflowsQuery
-      .orderBy("workflow.created_on", createdSort)
-      .limit(limit)
-      .offset(offset)
-      .execute();
-
-    let countQuery = dbConn
-      .selectFrom("workflow")
-      .select((eb) => eb.fn.count<number>("id").as("count"))
-      .where("environment_id", "in", environmentIds)
-      .where("is_deleted", "=", false);
-
-    if (normalizedSearch) {
-      const searchPattern = `%${normalizedSearch}%`;
-      countQuery = countQuery.where((eb) =>
-        eb.or([
-          eb("workflow.name", "ilike", searchPattern),
-          eb("workflow.description", "ilike", searchPattern),
-        ]),
-      );
-    }
-
-    const countResult = await countQuery.executeTakeFirst();
-
-    const workflowIds = workflows.map((w) => w.id);
-
-    if (workflowIds.length === 0) {
-      return {
-        items: [],
-        total: countResult ? Number(countResult.count) : 0,
-      };
-    }
-
-    const versions = await dbConn
-      .selectFrom("workflow_version")
-      .select(["workflow_id", "id", "version", "status"])
-      .where("workflow_id", "in", workflowIds)
-      .distinctOn("workflow_id")
-      .orderBy("workflow_id")
-      .orderBy("version", "desc")
-      .execute();
-
-    const versionMap = new Map(
-      versions.map((v) => [
-        v.workflow_id,
-        {
-          version: Number(v.version),
-          status: v.status,
-          id: v.id,
-        },
-      ]),
-    );
-
-    const items = workflows.map((wf) => {
-      const versionInfo = versionMap.get(wf.id);
-
-      return {
-        workflow: wf,
-        status: versionInfo?.status ?? null,
-        latestVersionId: versionInfo?.id ?? null,
-        latestVersionNumber: versionInfo?.version ?? null,
-      };
-    });
+    const results = await workflowsQuery.execute();
 
     return {
-      items,
-      total: countResult ? Number(countResult.count) : 0,
+      total: results[0] ? Number(results[0].total_count) : 0,
+      items: results.map((res) => {
+        const id = res.workflow_version_id;
+        const version = res.workflow_version_version;
+        const status = res.workflow_version_status;
+
+        return {
+          id: res.workflow_id,
+          name: res.workflow_name,
+          description: res.workflow_description,
+          environment: res.environment_type,
+          modifiedAt: res.workflow_modified_on,
+          modifiedBy: res.actor_type,
+
+          latestVersion:
+            id && version && status ? { id, version, status } : null,
+        };
+      }),
     };
   },
 };
