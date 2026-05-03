@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { userTaskController } from "../controllers/userTask.controller.js";
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
 import { environmentUtils } from "../utils/environment.utils.js";
+import { userTaskController } from "../controllers/usertask.controller.js";
 
 export const userTaskRouter = Router();
 
