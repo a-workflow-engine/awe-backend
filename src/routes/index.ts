@@ -9,9 +9,9 @@ import { auditRouter } from "./audit.routes.js";
 import { secretRouter } from "./secret.routes.js";
 import { secretProviderRouter } from "./secretProvider.routes.js";
 import { apiKeyRouter } from "./apiKey.routes.js";
-export const router = Router();
 
 const apiRouter = Router();
+
 apiRouter.use("/", organizationRouter);
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/workflows", workflowRouter);
@@ -23,4 +23,6 @@ apiRouter.use("/api-keys", apiKeyRouter);
 apiRouter.use("/secrets", secretRouter);
 apiRouter.use("/secret-providers", secretProviderRouter);
 
-router.use("/api/v1", apiRouter);
+export const router = Router();
+
+router.use("/v1", apiRouter);
