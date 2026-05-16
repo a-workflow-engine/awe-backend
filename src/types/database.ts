@@ -196,18 +196,31 @@ export interface UserTaskExecution {
 }
 
 export interface Workflow {
-  base_workflow_id: string | null;
   created_by: string;
   created_on: Generated<Timestamp>;
   deleted_by: string | null;
   deleted_on: Timestamp | null;
   description: string | null;
-  environment_id: string;
   id: Generated<string>;
   is_deleted: Generated<boolean>;
   modified_by: string;
   modified_on: Generated<Timestamp>;
   name: string;
+  organization_id: string;
+}
+
+export interface WorkflowActiveDeployment {
+  deployment_id: string;
+  environment_id: string;
+  major_version: number;
+  workflow_id: string;
+}
+
+export interface WorkflowDeployment {
+  created_on: Generated<Timestamp>;
+  environment_id: string;
+  id: Generated<string>;
+  workflow_version_id: string;
 }
 
 export interface WorkflowVersion {
@@ -215,11 +228,13 @@ export interface WorkflowVersion {
   created_on: Generated<Timestamp>;
   description: string | null;
   id: Generated<string>;
+  major_version: number | null;
+  minor_version: number | null;
   modified_by: string;
   modified_on: Generated<Timestamp>;
-  published_on: Timestamp | null;
+  patch_version: number | null;
   status: WorkflowVersionStatus;
-  version: string | null;
+  version: Generated<string | null>;
   workflow_id: string;
 }
 
@@ -239,5 +254,7 @@ export interface DB {
   task_execution: TaskExecution;
   user_task_execution: UserTaskExecution;
   workflow: Workflow;
+  workflow_active_deployment: WorkflowActiveDeployment;
+  workflow_deployment: WorkflowDeployment;
   workflow_version: WorkflowVersion;
 }

@@ -13,7 +13,6 @@ export const workflowController = {
   list: async (req: Request, res: Response) => {
     const data = WorkflowListRequestSchema.parse({
       ...req.query,
-      ...req.params,
     });
 
     const result = await workflowService.listPaginated(
@@ -30,7 +29,7 @@ export const workflowController = {
     const workflow = await workflowService.create(
       data,
       req.context.actor,
-      req.context.environments,
+      req.context.organization,
     );
 
     return res.status(201).json(workflow);
@@ -41,7 +40,7 @@ export const workflowController = {
 
     const workflowDetail = await workflowService.get(
       workflowId,
-      req.context.environments,
+      req.context.organization,
     );
 
     return res.status(200).json(workflowDetail);
@@ -56,7 +55,7 @@ export const workflowController = {
     const updatedWorkflowDetail = await workflowService.update(
       data,
       req.context.actor,
-      req.context.environments,
+      req.context.organization,
     );
 
     return res.status(200).json(updatedWorkflowDetail);
@@ -64,11 +63,14 @@ export const workflowController = {
 
   delete: async (req: Request, res: Response) => {
     const { workflowId } = WorkflowIdSchema.parse(req.params);
+
     await workflowService.delete(
       workflowId,
       req.context.actor,
+      req.context.organization,
       req.context.environments,
     );
+
     return res.status(204).end();
   },
 

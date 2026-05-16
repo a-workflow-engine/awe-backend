@@ -1,6 +1,8 @@
 import type { EnvironmentType } from "../types/database.js";
 import type { EnvironmentModel } from "../types/models.js";
 import { EnvironmentTypeSchema } from "../schemas/environment.schema.js";
+import { ForbiddenError } from "../errors/ForbiddenError.js";
+import { EnvironmentTypes } from "../types/enums.js";
 
 export const environmentUtils = {
   parseEnvironmentsFromQueryString(rawValue: unknown): EnvironmentType[] {
@@ -45,5 +47,26 @@ export const environmentUtils = {
     );
 
     return this.getEnvironmentIds(filteredEnvironments);
+  },
+
+  getSelectedEnvironmentOrThrow(
+    allowedEnvironments: EnvironmentModel[],
+    selectedEnvironmentType?: EnvironmentType,
+  ): EnvironmentModel {
+    if (!selectedEnvironmentType) {
+      selectedEnvironmentType = allowedEnvironments[0]
+        ? allowedEnvironments[0].type
+        : EnvironmentTypes.DEVELOPMENT;
+    }
+
+    const environment = allowedEnvironments.find(
+      (env) => env.type === selectedEnvironmentType,
+    );
+
+    if (!environment) {
+      throw new ForbiddenError();
+    }
+
+    return environment;
   },
 };

@@ -15,13 +15,7 @@ import {
   DefaultRuleSchema,
   BackoffSchema,
 } from "../schemas/node.schema.js";
-import type {
-  ActorType,
-  EnvironmentType,
-  NodeType,
-  Workflow,
-  WorkflowVersionStatus,
-} from "./database.js";
+import type { ActorType, NodeType, Workflow } from "./database.js";
 import { NodeTypes } from "./enums.js";
 import type { Insertable, Updateable } from "kysely";
 
@@ -85,26 +79,28 @@ export type DecisionNodeDefaultRule = z.infer<typeof DefaultRuleSchema>;
 
 export type BackoffSettings = z.infer<typeof BackoffSchema>;
 
-export type LatestVersionDetail = {
-  id: string;
-  version: string | null;
-  status: WorkflowVersionStatus;
-};
-
 export type WorkflowDetail = {
   id: string;
   name: string;
   description: string | null;
 
-  environment: EnvironmentType;
+  createdAt: Date;
+  createdBy: ActorType;
 
   modifiedAt: Date;
   modifiedBy: ActorType;
-
-  latestVersion: LatestVersionDetail | null;
 };
 
-export type WorkflowListItem = WorkflowDetail;
+export type WorkflowListItem = {
+  id: string;
+  name: string;
+
+  activeVersionCount: number;
+  draftCount: number;
+
+  modifiedAt: Date;
+  modifiedBy: ActorType;
+};
 
 export type NewWorkflow = Insertable<Workflow>;
 

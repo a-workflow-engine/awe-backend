@@ -1,11 +1,9 @@
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { workflowRepository } from "../repositories/workflow.repository.js";
-import { workflowVersionRepository } from "../repositories/workflowVersion.repository.js";
 import type {
   ActorModel,
   EnvironmentModel,
-  WorkflowModel,
-  WorkflowVersionModel,
+  OrganizationModel,
 } from "../types/models.js";
 import type {
   CreateWorkflowInput,
@@ -14,53 +12,31 @@ import type {
 } from "../schemas/workflow.schema.js";
 import { paginationUtils } from "../utils/pagination.utils.js";
 import { environmentUtils } from "../utils/environment.utils.js";
-import type { WorkflowDetail } from "../types/workflow.js";
-import { DataIntegrityError } from "../errors/DataIntegrity.js";
-import { WorkflowVersionStatuses } from "../types/enums.js";
+import type { WorkflowDetail, WorkflowListItem } from "../types/workflow.js";
 import { InvalidOperationError } from "../errors/InvalidOperationError.js";
-
-function toWorkflowDetail(
-  workflow: WorkflowModel,
-  environment: EnvironmentModel,
-  latestVersion: WorkflowVersionModel | null,
-  modifierActor: ActorModel,
-): WorkflowDetail {
-  return {
-    id: workflow.id,
-    name: workflow.name,
-    description: workflow.description,
-
-    environment: environment.type,
-
-    modifiedAt: workflow.modified_on,
-    modifiedBy: modifierActor.type,
-
-    latestVersion: latestVersion
-      ? {
-          id: latestVersion.id,
-          version: latestVersion.version,
-          status: latestVersion.status,
-        }
-      : null,
-  };
-}
+import type { PaginationResponse } from "../types/pagination.js";
+import { workflowActiveDeploymentRepository } from "../repositories/workflowActiveDeployment.repository.js";
 
 export const workflowService = {
   listPaginated: async (
     data: ListWorkflowInput,
     environments: EnvironmentModel[],
-  ) => {
-    const { items, total } =
-      await workflowRepository.findByWithLatestVersionPaginated({
-        offset: paginationUtils.getOffset(data.page, data.limit),
-        limit: data.limit,
-        search: data.search,
-        createdSort: data.createdSort,
-        environmentIds: environmentUtils.getFilteredEnvironmentIds(
-          environments,
-          data.environment,
-        ),
-      });
+  ): Promise<{
+    workflows: WorkflowListItem[];
+    pagination: PaginationResponse;
+  }> => {
+    const selectedEnvironment = environmentUtils.getSelectedEnvironmentOrThrow(
+      environments,
+      data.environment,
+    );
+
+    const { items, total } = await workflowRepository.findPaginated({
+      offset: paginationUtils.getOffset(data.page, data.limit),
+      limit: data.limit,
+      search: data.search,
+      createdSort: data.createdSort,
+      environmentId: selectedEnvironment.id,
+    });
 
     const pagination = paginationUtils.getPaginationResponse(
       total,
@@ -77,63 +53,54 @@ export const workflowService = {
   create: async (
     data: CreateWorkflowInput,
     actor: ActorModel,
-    environments: EnvironmentModel[],
+    organization: OrganizationModel,
   ): Promise<WorkflowDetail> => {
-    const selectedEnvironment = environments.find(
-      (env) => env.type === data.environment,
-    );
-
-    if (!selectedEnvironment) {
-      throw new NotFoundError(`Environment ${data.environment}`);
-    }
-
     const workflow = await workflowRepository.insert({
       name: data.name,
       description: data.description,
       created_by: actor.id,
-      environment_id: selectedEnvironment.id,
+      organization_id: organization.id,
       modified_by: actor.id,
     });
 
-    return toWorkflowDetail(workflow, selectedEnvironment, null, actor);
+    return {
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description,
+
+      createdAt: workflow.created_on,
+      createdBy: actor.type,
+
+      modifiedAt: workflow.modified_on,
+      modifiedBy: actor.type,
+    };
   },
 
   get: async (
     workflowId: string,
-    environments: EnvironmentModel[],
+    organization: OrganizationModel,
   ): Promise<WorkflowDetail> => {
-    const models =
-      await workflowRepository.findByIdAndEnvironmentIdsWithRelations(
-        workflowId,
-        environmentUtils.getEnvironmentIds(environments),
-      );
+    const workflow = await workflowRepository.findByIdAndOrganizationIdInDetail(
+      workflowId,
+      organization.id,
+    );
 
-    if (!models) {
+    if (!workflow) {
       throw new NotFoundError("Workflow");
     }
 
-    const { workflow, latestVersion, lastModifier } = models;
-
-    const environment = environments.find(
-      (env) => env.id === workflow.environment_id,
-    );
-    if (!environment) {
-      throw new DataIntegrityError(
-        `Actor cannnot access workflows in environment id=${workflow.environment_id}`,
-      );
-    }
-
-    return toWorkflowDetail(workflow, environment, latestVersion, lastModifier);
+    return workflow;
   },
 
   update: async (
     data: UpdateWorkflowInput,
     actor: ActorModel,
-    environments: EnvironmentModel[],
+    organization: OrganizationModel,
   ) => {
     const updatedWorkflow =
-      await workflowRepository.updateByIdAndEnvironmentIds(
+      await workflowRepository.updateByIdAndOrganizationId(
         data.workflowId,
+        organization.id,
         {
           ...(data.name !== undefined && { name: data.name }),
           ...(data.description !== undefined && {
@@ -142,25 +109,27 @@ export const workflowService = {
           modified_on: new Date(),
           modified_by: actor.id,
         },
-        environmentUtils.getEnvironmentIds(environments),
       );
 
     if (!updatedWorkflow) {
       throw new NotFoundError("Workflow");
     }
 
-    return await workflowService.get(updatedWorkflow.id, environments);
+    return await workflowService.get(updatedWorkflow.id, organization);
   },
 
   delete: async (
     workflowId: string,
     actor: ActorModel,
+    organization: OrganizationModel,
     environments: EnvironmentModel[],
   ) => {
+    const environmentIds = environmentUtils.getEnvironmentIds(environments);
+
     const activeVersionExists =
-      await workflowVersionRepository.versionsWithStatusExistsByWorkflowId(
+      await workflowActiveDeploymentRepository.existsByWorkflowIdAndEnvironmentIds(
         workflowId,
-        [WorkflowVersionStatuses.ACTIVE],
+        environmentIds,
       );
 
     if (activeVersionExists) {
@@ -170,14 +139,14 @@ export const workflowService = {
     }
 
     const updatedWorkflow =
-      await workflowRepository.updateByIdAndEnvironmentIds(
+      await workflowRepository.updateByIdAndOrganizationId(
         workflowId,
+        organization.id,
         {
           is_deleted: true,
           deleted_on: new Date(),
           deleted_by: actor.id,
         },
-        environmentUtils.getEnvironmentIds(environments),
       );
 
     if (!updatedWorkflow) {

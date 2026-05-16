@@ -127,7 +127,7 @@ export enum ApiKeyStatus {
   REVOKED = "revoked",
 }
 
-export enum CreatedSort {
+export enum SortType {
   ASCENDING = "asc",
   DESCENDING = "desc",
 }

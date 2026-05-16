@@ -1,4 +1,4 @@
-import type { Actor, ApiKey, Edge, Environment, Instance, InstanceLog, Node, Organization, RefreshToken, SecretProvider, SecretReference, Task, TaskExecution, UserTaskExecution, Workflow, WorkflowVersion } from "./database.js";
+import type { Actor, ApiKey, Edge, Environment, Instance, InstanceLog, Node, Organization, RefreshToken, SecretProvider, SecretReference, Task, TaskExecution, UserTaskExecution, Workflow, WorkflowActiveDeployment, WorkflowDeployment, WorkflowVersion } from "./database.js";
 
 
 
@@ -30,6 +30,10 @@ export const taskExecutionColumns = ["created_on","ended_on","id","input_variabl
 
 export const userTaskExecutionColumns = ["assignee","task_execution_id","title"] as const satisfies (keyof UserTaskExecution)[];
 
-export const workflowColumns = ["base_workflow_id","created_by","created_on","deleted_by","deleted_on","description","environment_id","id","is_deleted","modified_by","modified_on","name"] as const satisfies (keyof Workflow)[];
+export const workflowColumns = ["created_by","created_on","deleted_by","deleted_on","description","id","is_deleted","modified_by","modified_on","name","organization_id"] as const satisfies (keyof Workflow)[];
 
-export const workflowVersionColumns = ["created_by","created_on","description","id","modified_by","modified_on","published_on","status","version","workflow_id"] as const satisfies (keyof WorkflowVersion)[];
+export const workflowActiveDeploymentColumns = ["deployment_id","environment_id","major_version","workflow_id"] as const satisfies (keyof WorkflowActiveDeployment)[];
+
+export const workflowDeploymentColumns = ["created_on","environment_id","id","workflow_version_id"] as const satisfies (keyof WorkflowDeployment)[];
+
+export const workflowVersionColumns = ["created_by","created_on","description","id","major_version","minor_version","modified_by","modified_on","patch_version","status","version","workflow_id"] as const satisfies (keyof WorkflowVersion)[];

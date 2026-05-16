@@ -11,13 +11,25 @@ workflowRouter.use(authenticateRequest);
 
 workflowRouter.get("/", workflowController.list);
 
-workflowRouter.post("/", workflowController.create);
+workflowRouter.post(
+  "/",
+  allowActorTypes(ActorTypes.ORGANIZATION_ACCOUNT),
+  workflowController.create,
+);
 
 workflowRouter.get("/:workflowId", workflowController.get);
 
-workflowRouter.patch("/:workflowId", workflowController.update);
+workflowRouter.patch(
+  "/:workflowId",
+  allowActorTypes(ActorTypes.ORGANIZATION_ACCOUNT),
+  workflowController.update,
+);
 
-workflowRouter.delete("/:workflowId", workflowController.delete);
+workflowRouter.delete(
+  "/:workflowId",
+  allowActorTypes(ActorTypes.ORGANIZATION_ACCOUNT),
+  workflowController.delete,
+);
 
 workflowRouter.post("/validate", workflowController.validate);
 

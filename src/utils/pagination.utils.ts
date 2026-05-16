@@ -1,18 +1,9 @@
 import type { Request } from "express";
 import { PaginationParamsSchema } from "../schemas/pagination.schema.js";
-
-export type ParsedPagination = {
-  page: number;
-  limit: number;
-  offset: number;
-};
-
-type PaginationResponse = {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-};
+import type {
+  PaginationResponse,
+  ParsedPagination,
+} from "../types/pagination.js";
 
 export const parsePaginationFromRequest = (req: Request): ParsedPagination => {
   const { page, limit } = PaginationParamsSchema.parse(req.query);
@@ -56,9 +47,9 @@ export const paginationUtils = {
     limit: number,
   ): PaginationResponse => {
     return {
-      page,
-      limit,
       total: total,
+      limit,
+      page,
       totalPages: Math.ceil(total / limit),
     };
   },

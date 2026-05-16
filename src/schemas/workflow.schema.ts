@@ -1,17 +1,14 @@
 import { z } from "zod";
 import { EdgeSchema, NodeSchema } from "./node.schema.js";
-import {
-  EnvironmentQuerySchema,
-  EnvironmentTypeSchema,
-} from "./environment.schema.js";
+import { EnvironmentTypeSchema } from "./environment.schema.js";
 import { PaginationParamsSchema } from "./pagination.schema.js";
-import { CreatedSort } from "../types/enums.js";
+import { SortType } from "../types/enums.js";
 
 export const WorkflowListRequestSchema = z.object({
   ...PaginationParamsSchema.shape,
   search: z.string().optional(),
-  createdSort: z.enum(CreatedSort).default(CreatedSort.DESCENDING),
-  environment: EnvironmentQuerySchema,
+  createdSort: z.enum(SortType).default(SortType.DESCENDING),
+  environment: EnvironmentTypeSchema,
 });
 
 export const WorkflowCreateRequestSchema = z.object({
@@ -21,7 +18,6 @@ export const WorkflowCreateRequestSchema = z.object({
     .min(1)
     .optional()
     .transform((val) => val ?? null),
-  environment: EnvironmentTypeSchema,
 });
 
 export const WorkflowIdSchema = z.object({
