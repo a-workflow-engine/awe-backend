@@ -23,4 +23,14 @@ export const workflowDeploymentRepository = {
         );
       });
   },
+
+  findByWorkflowVersionId: async (
+    versionId: string,
+  ): Promise<WorkflowDeploymentModel[]> => {
+    return await db
+      .selectFrom("workflow_deployment")
+      .selectAll()
+      .where("workflow_version_id", "=", versionId)
+      .execute();
+  },
 };
