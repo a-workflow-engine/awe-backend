@@ -10,18 +10,25 @@ import { secretRouter } from "./secret.routes.js";
 import { secretProviderRouter } from "./secretProvider.routes.js";
 import { apiKeyRouter } from "./apiKey.routes.js";
 import { draftRouter } from "./workflowDraft.routes.js";
+import { versionRouter } from "./workflowVersion.routes.js";
 
 const apiRouter = Router();
 
 apiRouter.use("/", organizationRouter);
 apiRouter.use("/auth", authRouter);
+
 apiRouter.use("/workflows", workflowRouter);
 apiRouter.use("/workflow-drafts", draftRouter);
+apiRouter.use("/workflow-versions", versionRouter);
+
 apiRouter.use("/instances", instanceRouter);
 apiRouter.use("/tasks", taskRouter);
 apiRouter.use("/user-tasks", userTaskRouter);
+
 apiRouter.use("/audit", auditRouter);
+
 apiRouter.use("/api-keys", apiKeyRouter);
+
 apiRouter.use("/secrets", secretRouter);
 apiRouter.use("/secret-providers", secretProviderRouter);
 

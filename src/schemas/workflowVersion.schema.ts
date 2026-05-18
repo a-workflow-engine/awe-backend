@@ -1,71 +1,33 @@
 import { z } from "zod";
-import { NodeSchema, EdgeSchema } from "./node.schema.js";
-import {
-  EnvironmentTypes,
-  VersionIncrementType,
-  WorkflowVersionStatuses,
-} from "../types/enums.js";
+import { EnvironmentTypes } from "../types/enums.js";
 import { PaginationParamsSchema } from "./pagination.schema.js";
+import { EnvironmentTypeSchema } from "./environment.schema.js";
 
-export const WorkflowVersionListRequestSchema = z.object({
+export const VersionListRequestSchema = z.object({
   ...PaginationParamsSchema.shape,
-  workflowId: z.uuidv4(),
+  workflowId: z.uuidv4().optional(),
+  environment: EnvironmentTypeSchema.default(EnvironmentTypes.DEVELOPMENT),
 });
 
-export const WorkflowVersionCreateRequestSchema = z.object({
-  workflowId: z.uuidv4(),
-  description: z.string().nullable().optional(),
-  nodes: z.array(NodeSchema),
-  edges: z.array(EdgeSchema),
+export const VersionDetailRequestSchema = z.object({
+  versionId: z.uuidv4(),
+  environment: EnvironmentTypeSchema.default(EnvironmentTypes.DEVELOPMENT),
+  include: z.enum(["definition"]).optional(),
 });
 
 export const WorkflowVersionIdSchema = z.object({
   versionId: z.uuidv4(),
 });
 
-export const WorkflowVersionUpdateRequestSchema = z.object({
+export const WorkflowVersionToggleRequestSchema = z.object({
   versionId: z.uuidv4(),
-  description: z.string().nullable().optional(),
-  nodes: z.array(NodeSchema),
-  edges: z.array(EdgeSchema),
+  environment: EnvironmentTypeSchema.default(EnvironmentTypes.DEVELOPMENT),
 });
 
-export const WorkflowVersionUpdateStatusRequestSchema = z.object({
-  versionId: z.uuidv4(),
-  incrementType: z
-    .enum(VersionIncrementType)
-    .default(VersionIncrementType.MAJOR),
-});
+export type ListVersionsInput = z.infer<typeof VersionListRequestSchema>;
 
-export const WorkflowVersionPromoteResponseSchema = z.object({
-  workflowId: z.uuidv4(),
-  versionId: z.uuidv4(),
-  sourceEnvironment: z.enum([
-    EnvironmentTypes.DEVELOPMENT,
-    EnvironmentTypes.STAGING,
-  ]),
-  targetEnvironment: z.enum([
-    EnvironmentTypes.STAGING,
-    EnvironmentTypes.PRODUCTION,
-  ]),
-});
+export type DetailVersionInput = z.infer<typeof VersionDetailRequestSchema>;
 
-export type ListWorkflowVersionsInput = z.infer<
-  typeof WorkflowVersionListRequestSchema
->;
-
-export type CreateVersionInput = z.infer<
-  typeof WorkflowVersionCreateRequestSchema
->;
-
-export type UpdateVersionInput = z.infer<
-  typeof WorkflowVersionUpdateRequestSchema
->;
-
-export type PromoteVersionOutput = z.infer<
-  typeof WorkflowVersionPromoteResponseSchema
->;
-
-export type StatusPartialUpdateInput = z.infer<
-  typeof WorkflowVersionUpdateStatusRequestSchema
+export type ToggleVersionInput = z.infer<
+  typeof WorkflowVersionToggleRequestSchema
 >;

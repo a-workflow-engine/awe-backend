@@ -54,6 +54,11 @@ export type WorkflowDraftMeta = WorkflowVersionMeta &
     startVariables: StartVariable[];
   };
 
+export type WorkflowVersionMetadata = WorkflowVersionMeta & {
+  environment: EnvironmentType;
+  startVariables: StartVariable[];
+};
+
 export type WorkflowVersionDetail = WorkflowVersionMeta & {
   environment: EnvironmentType;
 

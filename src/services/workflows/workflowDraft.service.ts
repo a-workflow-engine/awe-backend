@@ -95,13 +95,13 @@ export const workflowDraftService = {
     data: ListDraftInput,
     organization: OrganizationModel,
   ) => {
-    const { items, total } = await workflowVersionRepository.findPaginated({
-      workflowId: data.workflowId,
-      limit: data.limit,
-      offset: paginationUtils.getOffset(data.page, data.limit),
-      organizationId: organization.id,
-      statuses: [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
-    });
+    const { items, total } =
+      await workflowVersionRepository.findPaginatedDrafts({
+        workflowId: data.workflowId,
+        limit: data.limit,
+        offset: paginationUtils.getOffset(data.page, data.limit),
+        organizationId: organization.id,
+      });
 
     const pagination = paginationUtils.getPaginationResponse(
       total,
@@ -189,10 +189,9 @@ export const workflowDraftService = {
     organization: OrganizationModel,
   ): Promise<WorkflowDraftDetail> => {
     const [draftMeta, startNodes] = await Promise.all([
-      workflowVersionRepository.findByIdAndOrganizationIdAsMeta(
+      workflowVersionRepository.findByIdAndOrganizationIdAsDraftMeta(
         data.draftId,
         organization.id,
-        [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
       ),
       nodeRepository.findByWorkflowVersionIdAndNodeType(
         data.draftId,
@@ -257,10 +256,9 @@ export const workflowDraftService = {
     organization: OrganizationModel,
   ): Promise<WorkflowDraftMeta> => {
     const draftMeta =
-      await workflowVersionRepository.findByIdAndOrganizationIdAsMeta(
+      await workflowVersionRepository.findByIdAndOrganizationIdAsDraftMeta(
         data.draftId,
         organization.id,
-        [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
       );
 
     if (!draftMeta) {
@@ -360,10 +358,9 @@ export const workflowDraftService = {
     organization: OrganizationModel,
   ): Promise<ValidationResult> => {
     const draftMeta =
-      await workflowVersionRepository.findByIdAndOrganizationIdAsMeta(
+      await workflowVersionRepository.findByIdAndOrganizationIdAsDraftMeta(
         draftId,
         organization.id,
-        [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
       );
 
     if (!draftMeta) {
@@ -389,10 +386,9 @@ export const workflowDraftService = {
     environments: EnvironmentModel[],
   ): Promise<WorkflowDraftMeta> => {
     const [draftMeta, startNodes] = await Promise.all([
-      workflowVersionRepository.findByIdAndOrganizationIdAsMeta(
+      workflowVersionRepository.findByIdAndOrganizationIdAsDraftMeta(
         data.draftId,
         organization.id,
-        [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
       ),
       nodeRepository.findByWorkflowVersionIdAndNodeType(
         data.draftId,
@@ -483,10 +479,9 @@ export const workflowDraftService = {
     organization: OrganizationModel,
   ): Promise<WorkflowDraftMeta> => {
     const draftMeta =
-      await workflowVersionRepository.findByIdAndOrganizationIdAsMeta(
+      await workflowVersionRepository.findByIdAndOrganizationIdAsDraftMeta(
         draftId,
         organization.id,
-        [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
       );
 
     if (!draftMeta) {
@@ -514,10 +509,9 @@ export const workflowDraftService = {
     organization: OrganizationModel,
   ) => {
     const draftMeta =
-      await workflowVersionRepository.findByIdAndOrganizationIdAsMeta(
+      await workflowVersionRepository.findByIdAndOrganizationIdAsDraftMeta(
         draftId,
         organization.id,
-        [WorkflowVersionStatuses.DRAFT, WorkflowVersionStatuses.VALID],
       );
 
     if (!draftMeta) {

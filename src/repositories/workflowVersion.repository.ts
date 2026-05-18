@@ -1,9 +1,6 @@
-import { sql } from "kysely";
-import type { WorkflowVersionStatus } from "../types/database.js";
 import { db } from "../database.js";
 import { RepositoryError } from "../errors/RepositoryError.js";
 import type {
-  ActorModel,
   DbTransaction,
   NodeModel,
   WorkflowModel,
@@ -12,9 +9,10 @@ import type {
 import { NodeTypes, WorkflowVersionStatuses } from "../types/enums.js";
 import { columnMapper } from "./utils/columnMapper.util.js";
 import {
-  actorColumns,
   nodeColumns,
+  workflowActiveDeploymentColumns,
   workflowColumns,
+  workflowDeploymentColumns,
   workflowVersionColumns,
 } from "../types/columnNames.js";
 import type {
@@ -23,14 +21,34 @@ import type {
   WorkflowVersionListItem,
   WorkflowVersionMeta,
 } from "../types/workflowVersion.js";
+import type {
+  WorkflowActiveDeploymentModel,
+  WorkflowDeploymentModel,
+} from "../types/environment.js";
 
 export const workflowVersionRepository = {
-  findByIdAndOrganizationIdAsMeta: async (
+  findIdAndOrganizationId: async (
+    id: string,
+    organizationId: string,
+  ): Promise<WorkflowVersionModel | undefined> => {
+    return await db
+      .selectFrom("workflow_version")
+      .innerJoin("workflow", (join) =>
+        join
+          .onRef("workflow.id", "=", "workflow_version.workflow_id")
+          .on("workflow.organization_id", "=", organizationId),
+      )
+      .selectAll("workflow_version")
+      .where("workflow_version.is_deleted", "=", false)
+      .where("workflow_version.id", "=", id)
+      .executeTakeFirst();
+  },
+
+  findByIdAndOrganizationIdAsDraftMeta: async (
     versionId: string,
     organizationId: string,
-    statuses: WorkflowVersionStatus[] = [],
   ): Promise<WorkflowVersionMeta | undefined> => {
-    let query = db
+    return await db
       .selectFrom("workflow_version")
       .innerJoin("workflow", (join) =>
         join
@@ -52,38 +70,153 @@ export const workflowVersionRepository = {
         eb.ref("modifier.type").as("modifiedBy"),
       ])
       .where("workflow_version.id", "=", versionId)
-      .where("workflow_version.is_deleted", "=", false);
-
-    if (statuses.length > 0) {
-      query = query.where("workflow_version.status", "in", statuses);
-    }
-
-    return query.executeTakeFirst();
+      .where("workflow_version.status", "in", [
+        WorkflowVersionStatuses.DRAFT,
+        WorkflowVersionStatuses.VALID,
+      ])
+      .where("workflow_version.is_deleted", "=", false)
+      .executeTakeFirst();
   },
 
-  findByIdWithModifierActor: async (
-    id: string,
+  findByIdAndEnvironmentIdAsMeta: async (
+    versionId: string,
+    ...environmentIds: string[]
+  ): Promise<WorkflowVersionMeta | undefined> => {
+    return await db
+      .selectFrom("workflow_version")
+      .innerJoin("workflow_deployment", (join) =>
+        join
+          .onRef(
+            "workflow_deployment.workflow_version_id",
+            "=",
+            "workflow_version.id",
+          )
+          .on("workflow_deployment.environment_id", "in", environmentIds),
+      )
+      .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
+      .innerJoin("actor as creator", "creator.id", "workflow.created_by")
+      .innerJoin("actor as modifier", "modifier.id", "workflow.modified_by")
+      .leftJoin("workflow_active_deployment", (join) =>
+        join
+          .onRef(
+            "workflow_active_deployment.deployment_id",
+            "=",
+            "workflow_deployment.id",
+          )
+          .onRef(
+            "workflow_active_deployment.workflow_id",
+            "=",
+            "workflow_version.workflow_id",
+          )
+          .onRef(
+            "workflow_active_deployment.major_version",
+            "=",
+            "workflow_version.major_version",
+          )
+          .on(
+            "workflow_active_deployment.environment_id",
+            "in",
+            environmentIds,
+          ),
+      )
+      .select((eb) => [
+        eb.ref("workflow_version.id").as("id"),
+        eb.ref("workflow_version.workflow_id").as("workflowId"),
+        eb.ref("workflow_version.description").as("description"),
+        eb.ref("workflow_version.version").as("version"),
+
+        eb
+          .case()
+          .when(
+            eb.ref("workflow_active_deployment.deployment_id"),
+            "is not",
+            eb.lit(null),
+          )
+          .then(WorkflowVersionStatuses.ACTIVE)
+          .else(eb.ref("workflow_version.status"))
+          .end()
+          .as("status"),
+
+        eb.ref("workflow_version.created_on").as("createdAt"),
+        eb.ref("workflow_version.modified_on").as("modifiedAt"),
+
+        eb.ref("creator.type").as("createdBy"),
+        eb.ref("modifier.type").as("modifiedBy"),
+      ])
+      .where("workflow_version.id", "=", versionId)
+      .where("workflow_version.status", "=", WorkflowVersionStatuses.PUBLISHED)
+      .where("workflow_version.is_deleted", "=", false)
+      .executeTakeFirst();
+  },
+
+  findByIdAndEnvironmentIdWithDeployment: async (
+    versionId: string,
+    ...environmentIds: string[]
   ): Promise<
     | {
         workflowVersion: WorkflowVersionModel;
-        modifierActor: ActorModel;
+        deployment: WorkflowDeploymentModel;
+        activeDeployment: WorkflowActiveDeploymentModel | undefined;
       }
     | undefined
   > => {
     const result = await db
       .selectFrom("workflow_version")
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .innerJoin("actor", "actor.id", "workflow_version.modified_by")
+      .innerJoin("actor as creator", "creator.id", "workflow.created_by")
+      .innerJoin("actor as modifier", "modifier.id", "workflow.modified_by")
+      .innerJoin("workflow_deployment", (join) =>
+        join
+          .onRef(
+            "workflow_deployment.workflow_version_id",
+            "=",
+            "workflow_version.id",
+          )
+          .on("workflow_deployment.environment_id", "in", environmentIds),
+      )
+      .leftJoin("workflow_active_deployment", (join) =>
+        join
+          .onRef(
+            "workflow_active_deployment.deployment_id",
+            "=",
+            "workflow_deployment.id",
+          )
+          .onRef(
+            "workflow_active_deployment.workflow_id",
+            "=",
+            "workflow_version.workflow_id",
+          )
+          .onRef(
+            "workflow_active_deployment.major_version",
+            "=",
+            "workflow_version.major_version",
+          )
+          .on(
+            "workflow_active_deployment.environment_id",
+            "in",
+            environmentIds,
+          ),
+      )
       .select((eb) => [
-        ...columnMapper.prefixedColumns<WorkflowVersionModel>(
+        ...columnMapper.prefixedColumns(
           eb,
           "workflow_version",
           workflowVersionColumns,
         ),
-        ...columnMapper.prefixedColumns<ActorModel>(eb, "actor", actorColumns),
+        ...columnMapper.prefixedColumns(
+          eb,
+          "workflow_deployment",
+          workflowDeploymentColumns,
+        ),
+        ...columnMapper.prefixedColumns(
+          eb,
+          "workflow_active_deployment",
+          workflowActiveDeploymentColumns,
+        ),
       ])
-      .where("workflow_version.id", "=", id)
-      .where("workflow.is_deleted", "=", false)
+      .where("workflow_version.id", "=", versionId)
+      .where("workflow_version.status", "=", WorkflowVersionStatuses.PUBLISHED)
+      .where("workflow_version.is_deleted", "=", false)
       .executeTakeFirst();
 
     if (!result) {
@@ -91,11 +224,11 @@ export const workflowVersionRepository = {
     }
 
     return {
-      workflowVersion: columnMapper.extractPrefixed<WorkflowVersionModel>(
-        result,
-        "workflow_version",
-      ),
-      modifierActor: columnMapper.extractPrefixed<ActorModel>(result, "actor"),
+      workflowVersion: columnMapper.extractPrefixed(result, "workflow_version"),
+      deployment: columnMapper.extractPrefixed(result, "workflow_deployment"),
+      activeDeployment: result.workflow_active_deployment__deployment_id
+        ? columnMapper.extractPrefixed(result, "workflow_active_deployment")
+        : undefined,
     };
   },
 
@@ -110,12 +243,11 @@ export const workflowVersionRepository = {
       .executeTakeFirst();
   },
 
-  findPaginated: async (data: {
+  findPaginatedDrafts: async (data: {
     workflowId?: string | undefined;
+    organizationId: string;
     offset: number;
     limit: number;
-    organizationId: string;
-    statuses: WorkflowVersionStatus[];
   }): Promise<{ items: WorkflowVersionListItem[]; total: number }> => {
     let query = db
       .selectFrom("workflow_version")
@@ -137,17 +269,102 @@ export const workflowVersionRepository = {
         eb.fn.countAll().over().as("total_count"),
       ])
       .where("workflow_version.is_deleted", "=", false)
+      .where("workflow_version.status", "in", [
+        WorkflowVersionStatuses.DRAFT,
+        WorkflowVersionStatuses.VALID,
+      ])
       .orderBy("workflow_version.version", "desc")
       .orderBy("workflow_version.modified_on", "desc")
       .limit(data.limit)
       .offset(data.offset);
 
-    if (data.workflowId) {
-      query = query.where("workflow_version.workflow_id", "=", data.workflowId);
+    const workflowId = data.workflowId;
+    if (workflowId) {
+      query = query.where("workflow_version.workflow_id", "=", workflowId);
     }
 
-    if (data.statuses.length > 0) {
-      query = query.where("workflow_version.status", "in", data.statuses);
+    const results = await query.execute();
+
+    return {
+      total: results[0] ? Number(results[0].total_count) : 0,
+      items: results.map(({ total_count, ...rest }) => rest),
+    };
+  },
+
+  findPaginated: async (data: {
+    workflowId?: string | undefined;
+    environmentId: string;
+    offset: number;
+    limit: number;
+  }): Promise<{ items: WorkflowVersionListItem[]; total: number }> => {
+    let query = db
+      .selectFrom("workflow_version")
+      .innerJoin("actor", "actor.id", "workflow_version.modified_by")
+      .innerJoin("workflow_deployment", (join) =>
+        join
+          .onRef(
+            "workflow_deployment.workflow_version_id",
+            "=",
+            "workflow_version.id",
+          )
+          .on("workflow_deployment.environment_id", "=", data.environmentId),
+      )
+      .leftJoin("workflow_active_deployment", (join) =>
+        join
+          .onRef(
+            "workflow_active_deployment.deployment_id",
+            "=",
+            "workflow_deployment.id",
+          )
+          .onRef(
+            "workflow_active_deployment.workflow_id",
+            "=",
+            "workflow_version.workflow_id",
+          )
+          .onRef(
+            "workflow_active_deployment.major_version",
+            "=",
+            "workflow_version.major_version",
+          )
+          .on(
+            "workflow_active_deployment.environment_id",
+            "=",
+            data.environmentId,
+          ),
+      )
+      .select((eb) => [
+        eb.ref("workflow_version.id").as("id"),
+        eb.ref("workflow_version.version").as("version"),
+        eb.ref("workflow_version.description").as("description"),
+
+        eb
+          .case()
+          .when(
+            eb.ref("workflow_active_deployment.deployment_id"),
+            "is not",
+            eb.lit(null),
+          )
+          .then(WorkflowVersionStatuses.ACTIVE)
+          .else(eb.ref("workflow_version.status"))
+          .end()
+          .as("status"),
+
+        eb.ref("workflow_version.modified_on").as("modifiedAt"),
+
+        eb.ref("actor.type").as("modifiedBy"),
+
+        eb.fn.countAll().over().as("total_count"),
+      ])
+      .where("workflow_version.is_deleted", "=", false)
+      .where("workflow_version.status", "=", WorkflowVersionStatuses.PUBLISHED)
+      .orderBy("workflow_version.version", "desc")
+      .orderBy("workflow_version.modified_on", "desc")
+      .limit(data.limit)
+      .offset(data.offset);
+
+    const workflowId = data.workflowId;
+    if (workflowId) {
+      query = query.where("workflow_version.workflow_id", "=", workflowId);
     }
 
     const results = await query.execute();
