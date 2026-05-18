@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { authenticateRequest } from "../middlewares/auth.middleware.js";
 import { secretProviderController } from "../controllers/secretProvider.controller.js";
-import { allowActorTypes } from "../middlewares/requireRoles.middleware.js";
+import { allowActorTypes } from "../middlewares/allowTypes.middleware.js";
 import { ActorTypes } from "../types/enums.js";
 
 export const secretProviderRouter = Router();

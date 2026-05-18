@@ -1,10 +1,25 @@
 import type { Insertable, Updateable } from "kysely";
 import type {
   ActorType,
+  EnvironmentType,
   WorkflowVersion,
   WorkflowVersionStatus,
 } from "./database.js";
-import type { ValidationResult } from "../services/workflowValidator.service.js";
+import type { Edge, Node } from "./workflow.js";
+import z from "zod";
+import type { StartVariablesSchema } from "../schemas/node.schema.js";
+
+export type ValidationError = {
+  code: number;
+  message: string;
+  nodeId?: string;
+  edgeId?: string;
+};
+
+export type ValidationResult = {
+  valid: boolean;
+  errors: ValidationError[];
+};
 
 export type WorkflowVersionListItem = {
   id: string;
@@ -12,27 +27,45 @@ export type WorkflowVersionListItem = {
   description: string | null;
   status: WorkflowVersionStatus;
 
-  publishedAt: Date | null;
+  modifiedAt: Date;
+  modifiedBy: ActorType;
+};
+
+export type StartVariable = z.infer<typeof StartVariablesSchema>;
+
+export type WorkflowVersionMeta = {
+  id: string;
+  workflowId: string;
+
+  description: string | null;
+  version: string | null;
+  status: WorkflowVersionStatus;
+
+  createdAt: Date;
+  createdBy: ActorType;
 
   modifiedAt: Date;
   modifiedBy: ActorType;
 };
 
-export type WorkflowVersionMetaData = {
-  workflowVersion: {
-    id: string;
-    workflow_id: string;
-
-    description: string | null;
-    status: WorkflowVersionStatus;
-    version: string | null;
-
-    modifiedAt: Date;
-    modifiedBy: ActorType;
-
-    publishedAt: Date | null;
+export type WorkflowDraftMeta = WorkflowVersionMeta &
+  ValidationResult & {
+    environment: "development";
+    startVariables: StartVariable[];
   };
-} & ValidationResult;
+
+export type WorkflowVersionDetail = WorkflowVersionMeta & {
+  environment: EnvironmentType;
+
+  definition?: {
+    nodes: Node[];
+    edges: Edge[];
+  };
+
+  startVariables: StartVariable[];
+};
+
+export type WorkflowDraftDetail = WorkflowVersionDetail & ValidationResult;
 
 export type NewWorkflowVersion = Insertable<WorkflowVersion>;
 

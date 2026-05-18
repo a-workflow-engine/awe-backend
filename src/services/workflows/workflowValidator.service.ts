@@ -1,7 +1,6 @@
-import { FeelDataType, NodeTypes } from "../types/enums.js";
-import { v4 as uuidv4 } from "uuid";
-import { nodeSchemaService } from "./nodeSchema.service.js";
-import type { EdgeModel, NodeModel } from "../types/models.js";
+import { FeelDataType, NodeTypes } from "../../types/enums.js";
+import { nodeSchemaService } from "../nodeSchema.service.js";
+import type { EdgeModel, NodeModel } from "../../types/models.js";
 import {
   DecisionNodeConfigurationSchema,
   EmailNodeConfigurationSchema,
@@ -10,65 +9,22 @@ import {
   ServiceNodeConfigurationSchema,
   StartNodeConfigurationSchema,
   UserNodeConfigurationSchema,
-} from "../schemas/node.schema.js";
-import { converterUtils } from "../utils/converter.utils.js";
+} from "../../schemas/node.schema.js";
+import { converterUtils } from "../../utils/converter.utils.js";
 import {
   isValidFeelType,
   validateConditionExpression,
   validateFeelExpression,
   validateUrlExpression,
-} from "../utils/feel.utils.js";
-import { graphUtils } from "../utils/graph.utils.js";
+} from "../../utils/feel.utils.js";
+import { graphUtils } from "../../utils/graph.utils.js";
 import { parser as pythonParser } from "@lezer/python";
 import type {
   Edge as WorkflowEdge,
   Node as WorkflowNode,
-} from "../types/workflow.js";
-
-export type ValidationError = {
-  code: number;
-  message: string;
-  nodeId?: string;
-  edgeId?: string;
-};
-
-export type ValidationResult = {
-  valid: boolean;
-  errors: ValidationError[];
-};
-
-export enum ValidationErrorCode {
-  START_NODE_MISSING_OR_MULTIPLE,
-  END_NODE_MISSING,
-
-  EDGE_TARGET_NODE_MISSING,
-  EDGE_SOURCE_AND_TARGET_EQUAL,
-  EDGE_SOURCE_NODE_IS_END,
-  EDGE_TARGET_NODE_IS_START,
-
-  WORKFLOW_CONTAINS_CYCLE,
-  UNREACHABLE_NODE,
-  DEAD_END_NODE,
-
-  NODE_MISSING_REQUIRED_CONFIGURATION,
-  INVALID_FEEL_EXPRESSION,
-
-  DECISION_NODE_MISSING_RULES,
-  DECISION_MISSING_DEFAULT_EDGE,
-  DECISION_RULES_EDGE_MISMATCH,
-
-  EDGE_REFERENCED_NODE_MISSING,
-  INVALID_CONTEXT_VARIABLE_REFERENCE,
-  INVALID_JSON_PATH,
-  INVALID_PYTHON_CODE,
-  SCRIPT_ENTRY_FUNCTION_MISSING,
-  SCRIPT_PARAM_INVALID,
-  OUTPUT_SCHEMA_VARIABLE_UNASSIGNED,
-  INVALID_OUTGOING_EDGE_COUNT,
-  INVALID_DEFAULT_VALUE,
-  INVALID_TIMEOUT_CONFIGURATION,
-  INVALID_ON_ERROR_CONFIGURATION,
-}
+} from "../../types/workflow.js";
+import type { ValidationError, ValidationResult } from "../../types/workflowVersion.js";
+import { ValidationErrorCode } from "../../types/enums.js";
 
 type ExpressionValidator = (expr: string) => { valid: boolean; error?: string };
 
@@ -373,10 +329,8 @@ function toValidationModels(
     : {};
 
   const validationNodes = nodes.map((node) => {
-    const { inputSchema, outputSchema } = nodeSchemaService.getInputOutputSchemas(
-      node,
-      fetchablesMap,
-    );
+    const { inputSchema, outputSchema } =
+      nodeSchemaService.getInputOutputSchemas(node, fetchablesMap);
 
     return {
       id: node.id,

@@ -25,14 +25,18 @@ export const FetchableSchema = z.object({
   urlExpression: z.string(),
 });
 
+export const StartVariablesSchema = z.object({
+  jsonPath: z.string(),
+  dataType: FeelDataTypeSchema,
+  required: z.boolean().default(true),
+  defaultValue: z.unknown().optional(),
+});
+
 export const StartNodeDataMapSchema = z
   .object({
-    jsonPath: z.string(),
-    dataType: FeelDataTypeSchema,
+    ...StartVariablesSchema.shape,
     contextVariableName: z.string(),
     fetchableId: z.string().optional(),
-    required: z.boolean().default(true),
-    defaultValue: z.unknown().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.fetchableId) {

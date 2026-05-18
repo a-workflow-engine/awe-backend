@@ -226,8 +226,11 @@ export interface WorkflowDeployment {
 export interface WorkflowVersion {
   created_by: string;
   created_on: Generated<Timestamp>;
+  deleted_by: string | null;
+  deleted_on: Timestamp | null;
   description: string | null;
   id: Generated<string>;
+  is_deleted: Generated<boolean | null>;
   major_version: number | null;
   minor_version: number | null;
   modified_by: string;

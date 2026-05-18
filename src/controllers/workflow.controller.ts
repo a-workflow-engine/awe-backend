@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { workflowService } from "../services/workflow.service.js";
+import { workflowService } from "../services/workflows/workflow.service.js";
 import {
   WorkflowDefinitionValidateSchema,
   WorkflowCreateRequestSchema,
@@ -7,7 +7,7 @@ import {
   WorkflowIdSchema,
   WorkflowListRequestSchema,
 } from "../schemas/workflow.schema.js";
-import { workflowValidatorService } from "../services/workflowValidator.service.js";
+import { workflowValidatorService } from "../services/workflows/workflowValidator.service.js";
 
 export const workflowController = {
   list: async (req: Request, res: Response) => {

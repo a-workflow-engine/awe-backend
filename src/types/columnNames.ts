@@ -36,4 +36,4 @@ export const workflowActiveDeploymentColumns = ["deployment_id","environment_id"
 
 export const workflowDeploymentColumns = ["created_on","environment_id","id","workflow_version_id"] as const satisfies (keyof WorkflowDeployment)[];
 
-export const workflowVersionColumns = ["created_by","created_on","description","id","major_version","minor_version","modified_by","modified_on","patch_version","status","version","workflow_id"] as const satisfies (keyof WorkflowVersion)[];
+export const workflowVersionColumns = ["created_by","created_on","deleted_by","deleted_on","description","id","is_deleted","major_version","minor_version","modified_by","modified_on","patch_version","status","version","workflow_id"] as const satisfies (keyof WorkflowVersion)[];

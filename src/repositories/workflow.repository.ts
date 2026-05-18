@@ -64,8 +64,9 @@ export const workflowRepository = {
     id: string,
     organizationId: string,
     data: UpdateWorkflow,
+    transaction?: DbTransaction,
   ): Promise<WorkflowModel | undefined> => {
-    return await db
+    return await (transaction ?? db)
       .updateTable("workflow")
       .set(data)
       .where("id", "=", id)

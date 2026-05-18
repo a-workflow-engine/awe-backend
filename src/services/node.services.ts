@@ -18,7 +18,7 @@ export const nodeService = {
   createMany: async (
     data: Node[],
     actor: ActorModel,
-    workflowVersion: WorkflowVersionModel,
+    versionId: string,
     transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
     if (data.length === 0) {
@@ -54,7 +54,7 @@ export const nodeService = {
         modified_by: actor.id,
         name: node.label ?? null,
         type: node.type,
-        workflow_version_id: workflowVersion.id,
+        workflow_version_id: versionId,
         x_coordinate: node.position?.x ?? null,
         y_coordinate: node.position?.y ?? null,
         input_schema: converterUtils.objectToJsonValue(inputSchema),
@@ -65,24 +65,18 @@ export const nodeService = {
     return await nodeRepository.insertMany(nodes, transaction);
   },
 
-  getByWorkflowVersion: async (
-    workflowVersion: WorkflowVersionModel,
+  getByWorkflowVersionId: async (
+    versionId: string,
     transaction?: DbTransaction,
   ): Promise<NodeModel[]> => {
-    return await nodeRepository.findByWorkflowVersionId(
-      workflowVersion.id,
-      transaction,
-    );
+    return await nodeRepository.findByWorkflowVersionId(versionId, transaction);
   },
 
-  deleteByWorkflowVersion: async (
-    workflowVersion: WorkflowVersionModel,
+  deleteByWorkflowVersionId: async (
+    versionId: string,
     transaction?: DbTransaction,
   ): Promise<void> => {
-    await nodeRepository.deleteByWorkflowVersionId(
-      workflowVersion.id,
-      transaction,
-    );
+    await nodeRepository.deleteByWorkflowVersionId(versionId, transaction);
   },
 
   getByStartNodeByWorkflowVersionId: async (

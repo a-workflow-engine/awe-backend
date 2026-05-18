@@ -1,21 +1,23 @@
-import { NotFoundError } from "../errors/NotFoundError.js";
-import { workflowRepository } from "../repositories/workflow.repository.js";
+import { NotFoundError } from "../../errors/NotFoundError.js";
+import { workflowRepository } from "../../repositories/workflow.repository.js";
 import type {
   ActorModel,
   EnvironmentModel,
   OrganizationModel,
-} from "../types/models.js";
+} from "../../types/models.js";
 import type {
   CreateWorkflowInput,
   ListWorkflowInput,
   UpdateWorkflowInput,
-} from "../schemas/workflow.schema.js";
-import { paginationUtils } from "../utils/pagination.utils.js";
-import { environmentUtils } from "../utils/environment.utils.js";
-import type { WorkflowDetail, WorkflowListItem } from "../types/workflow.js";
-import { InvalidOperationError } from "../errors/InvalidOperationError.js";
-import type { PaginationResponse } from "../types/pagination.js";
-import { workflowActiveDeploymentRepository } from "../repositories/workflowActiveDeployment.repository.js";
+} from "../../schemas/workflow.schema.js";
+import { paginationUtils } from "../../utils/pagination.utils.js";
+import { environmentUtils } from "../../utils/environment.utils.js";
+import type { WorkflowDetail, WorkflowListItem } from "../../types/workflow.js";
+import { InvalidOperationError } from "../../errors/InvalidOperationError.js";
+import type { PaginationResponse } from "../../types/pagination.js";
+import { workflowActiveDeploymentRepository } from "../../repositories/workflowActiveDeployment.repository.js";
+import { workflowVersionRepository } from "../../repositories/workflowVersion.repository.js";
+import { openTransaction } from "../../utils/database.utils.js";
 
 export const workflowService = {
   listPaginated: async (
@@ -138,19 +140,30 @@ export const workflowService = {
       );
     }
 
-    const updatedWorkflow =
-      await workflowRepository.updateByIdAndOrganizationId(
-        workflowId,
-        organization.id,
-        {
-          is_deleted: true,
-          deleted_on: new Date(),
-          deleted_by: actor.id,
-        },
-      );
+    const deleteMetaData = {
+      is_deleted: true,
+      deleted_on: new Date(),
+      deleted_by: actor.id,
+    };
 
-    if (!updatedWorkflow) {
-      throw new NotFoundError("Workflow");
-    }
+    openTransaction(async (transaction) => {
+      const [updatedWorkflow] = await Promise.all([
+        workflowRepository.updateByIdAndOrganizationId(
+          workflowId,
+          organization.id,
+          deleteMetaData,
+          transaction,
+        ),
+        workflowVersionRepository.updateByWorkflowId(
+          workflowId,
+          deleteMetaData,
+          transaction,
+        ),
+      ]);
+
+      if (!updatedWorkflow) {
+        throw new NotFoundError("Workflow");
+      }
+    });
   },
 };

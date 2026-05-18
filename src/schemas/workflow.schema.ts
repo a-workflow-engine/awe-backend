@@ -34,10 +34,12 @@ export const WorkflowUpdateRequestSchema = z
     message: "Provide at least one non-empty field to update",
   });
 
-export const WorkflowDefinitionValidateSchema = z.object({
-  nodes: z.array(NodeSchema),
-  edges: z.array(EdgeSchema),
+export const WorkflowDefinitionSchema = z.object({
+  nodes: z.array(NodeSchema).default([]),
+  edges: z.array(EdgeSchema).default([]),
 });
+
+export const WorkflowDefinitionValidateSchema = WorkflowDefinitionSchema;
 
 export type ListWorkflowInput = z.infer<typeof WorkflowListRequestSchema>;
 

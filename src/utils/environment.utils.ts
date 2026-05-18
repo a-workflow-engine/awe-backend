@@ -1,8 +1,8 @@
 import type { EnvironmentType } from "../types/database.js";
 import type { EnvironmentModel } from "../types/models.js";
 import { EnvironmentTypeSchema } from "../schemas/environment.schema.js";
-import { ForbiddenError } from "../errors/ForbiddenError.js";
 import { EnvironmentTypes } from "../types/enums.js";
+import { AuthError } from "../errors/AuthError.js";
 
 export const environmentUtils = {
   parseEnvironmentsFromQueryString(rawValue: unknown): EnvironmentType[] {
@@ -64,7 +64,7 @@ export const environmentUtils = {
     );
 
     if (!environment) {
-      throw new ForbiddenError();
+      throw new AuthError("Forbidden", 403);
     }
 
     return environment;
