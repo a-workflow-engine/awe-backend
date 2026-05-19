@@ -12,7 +12,6 @@ import type {
   WorkflowVersionModel,
 } from "../types/models.js";
 import type { z } from "zod";
-import { workflowVersionService } from "./workflowVersion.service.js";
 import { nodeService } from "./node.services.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { StateTransitionError } from "../errors/StateTransitionError.js";
@@ -39,6 +38,7 @@ import { buildExecutionSequence } from "../utils/nodePath.utils.js";
 import { taskExecutionRepository } from "../repositories/taskExecution.repository.js";
 import type { ExecutionSequenceResponse } from "../types/nodePath.js";
 import type { Context } from "../types/engine.js";
+import { workflowVersionService } from "./workflows/workflowVersion.service.js";
 
 export type CreateVersionInput = z.infer<typeof InstanceCreateSchema>;
 
@@ -239,7 +239,7 @@ export const instanceService = {
       await workflowVersionService.getActiveVersionByWorkflowIdWithRelations(
         data.workflowId,
       );
-    if (!models || !environmentIds.includes(models.workflow.environment_id)) {
+    if (!models) {
       throw new NotFoundError("Active workflow version");
     }
 
@@ -262,7 +262,7 @@ export const instanceService = {
       async (transaction) => {
         const instance = await instanceRepository.insert(
           {
-            workflow_version_id: workflowVersion.id,
+            deployment_id: "",
             status: data.autoAdvance
               ? InstanceStatuses.IN_PROGRESS
               : InstanceStatuses.PAUSED,

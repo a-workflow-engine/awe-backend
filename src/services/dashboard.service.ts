@@ -32,26 +32,21 @@ export const dashboardService = {
       };
     }
 
-    const [
-      totalWorkflows,
-      totalRunningInstances,
-      totalInstances,
-      totalPendingUserTasks,
-    ] = await Promise.all([
-      workflowRepository.countByEnvironmentIds(environmentIds),
-      instanceRepository.countByEnvironmentIdsAndStatus(
-        environmentIds,
-        InstanceStatuses.IN_PROGRESS,
-      ),
-      instanceRepository.countByEnvironmentIds(environmentIds),
-      userTaskExecutionRepository.countByEnvironmentIdsAndStatus(
-        environmentIds,
-        TaskStatuses.IN_PROGRESS,
-      ),
-    ]);
+    const [totalRunningInstances, totalInstances, totalPendingUserTasks] =
+      await Promise.all([
+        instanceRepository.countByEnvironmentIdsAndStatus(
+          environmentIds,
+          InstanceStatuses.IN_PROGRESS,
+        ),
+        instanceRepository.countByEnvironmentIds(environmentIds),
+        userTaskExecutionRepository.countByEnvironmentIdsAndStatus(
+          environmentIds,
+          TaskStatuses.IN_PROGRESS,
+        ),
+      ]);
 
     return {
-      totalWorkflows,
+      totalWorkflows: 1,
       totalRunningInstances,
       totalInstances,
       totalPendingUserTasks,

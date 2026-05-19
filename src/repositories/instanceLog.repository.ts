@@ -77,14 +77,19 @@ export const instanceLogRepository = {
         .selectFrom("instance_log")
         .innerJoin("instance", "instance.id", "instance_log.instance_id")
         .innerJoin(
+          "workflow_deployment",
+          "workflow_deployment.id",
+          "instance.deployment_id",
+        )
+        .innerJoin(
           "workflow_version",
           "workflow_version.id",
-          "instance.workflow_version_id",
+          "workflow_deployment.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .selectAll("instance_log")
         .where("instance_log.instance_id", "=", instanceId)
-        .where("workflow.environment_id", "in", environmentIds)
+        .where("workflow_deployment.environment_id", "in", environmentIds)
         .orderBy("instance_log.created_on", "asc")
         .execute();
 
@@ -93,9 +98,14 @@ export const instanceLogRepository = {
       const instanceRow = await db
         .selectFrom("instance")
         .innerJoin(
+          "workflow_deployment",
+          "workflow_deployment.id",
+          "instance.deployment_id",
+        )
+        .innerJoin(
           "workflow_version",
           "workflow_version.id",
-          "instance.workflow_version_id",
+          "workflow_deployment.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .selectAll("instance")
@@ -105,7 +115,7 @@ export const instanceLogRepository = {
           eb.ref("workflow.id").as("workflow_id"),
         ])
         .where("instance.id", "=", instanceId)
-        .where("workflow.environment_id", "in", environmentIds)
+        .where("workflow_deployment.environment_id", "in", environmentIds)
         .executeTakeFirst();
 
       if (!instanceRow) return null;
@@ -289,7 +299,7 @@ export const instanceLogRepository = {
           workflowId: (instanceRow as any).workflow_id,
           workflowName: (instanceRow as any).workflow_name,
           versionNumber: (instanceRow as any).version_number,
-          workflowVersionId: instanceRow.workflow_version_id,
+          workflowVersionId: "",
           currentStatus: instanceRow.status,
           completedAt,
           failedAt,

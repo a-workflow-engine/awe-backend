@@ -92,13 +92,13 @@ export interface Instance {
   created_on: Generated<Timestamp>;
   current_node_id: string | null;
   current_variables: Json | null;
+  deployment_id: string;
   ended_on: Timestamp | null;
   id: Generated<string>;
   input_variables: Json | null;
   is_deleted: Generated<boolean>;
   output_variables: Json | null;
   status: InstanceStatus;
-  workflow_version_id: string;
 }
 
 export interface InstanceLog {

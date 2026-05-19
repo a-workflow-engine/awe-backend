@@ -71,12 +71,21 @@ export const userTaskExecutionRepository = {
       .innerJoin("task", "task.id", "task_execution.task_id")
       .innerJoin("instance", "instance.id", "task.instance_id")
       .innerJoin(
+        "workflow_deployment",
+        "workflow_deployment.id",
+        "instance.deployment_id",
+      )
+      .innerJoin(
         "workflow_version",
         "workflow_version.id",
-        "instance.workflow_version_id",
+        "workflow_deployment.workflow_version_id",
       )
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
-      .innerJoin("environment", "environment.id", "workflow.environment_id")
+      .innerJoin(
+        "environment",
+        "environment.id",
+        "workflow_deployment.environment_id",
+      )
       .innerJoin("node", "node.id", "task.node_id")
       .select((eb) => [
         ...columnMapper.prefixedColumns<TaskModel>(eb, "task", taskColumns),
@@ -168,9 +177,14 @@ export const userTaskExecutionRepository = {
         .innerJoin("task", "task.id", "task_execution.task_id")
         .innerJoin("instance", "instance.id", "task.instance_id")
         .innerJoin(
+          "workflow_deployment",
+          "workflow_deployment.id",
+          "instance.deployment_id",
+        )
+        .innerJoin(
           "workflow_version",
           "workflow_version.id",
-          "instance.workflow_version_id",
+          "workflow_deployment.workflow_version_id",
         )
         .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
         .innerJoin("node", "node.id", "task.node_id")
@@ -183,12 +197,14 @@ export const userTaskExecutionRepository = {
           eb.ref("task_execution.created_on").as("user_task_created_on"),
           eb.ref("task.instance_id").as("instance_id"),
           eb.ref("task.id").as("task_id"),
-          eb.ref("instance.workflow_version_id").as("workflow_version_id"),
+          eb
+            .ref("workflow_deployment.workflow_version_id")
+            .as("workflow_version_id"),
           eb.ref("node.client_id").as("node_client_id"),
           eb.fn.countAll().over().as("total_count"),
         ])
         .where("task_execution.status", "=", data.status)
-        .where("workflow.environment_id", "in", data.environmentIds);
+        .where("workflow_deployment.environment_id", "in", data.environmentIds);
 
       if (data.assignee) {
         query = query.where(
@@ -241,13 +257,18 @@ export const userTaskExecutionRepository = {
       .selectFrom("task")
       .innerJoin("instance", "instance.id", "task.instance_id")
       .innerJoin(
+        "workflow_deployment",
+        "workflow_deployment.id",
+        "instance.deployment_id",
+      )
+      .innerJoin(
         "workflow_version",
         "workflow_version.id",
-        "instance.workflow_version_id",
+        "workflow_deployment.workflow_version_id",
       )
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
       .select((eb) => eb.fn.count<number>("instance.id").as("count"))
-      .where("workflow.environment_id", "in", environmentIds)
+      .where("workflow_deployment.environment_id", "in", environmentIds)
       .where("instance.is_deleted", "=", false)
       .where("workflow.is_deleted", "=", false)
       .where("task.status", "=", status)

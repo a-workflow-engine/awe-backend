@@ -66,9 +66,14 @@ export const taskRepository = {
       .innerJoin("node", "node.id", "task.node_id")
       .innerJoin("instance", "instance.id", "task.instance_id")
       .innerJoin(
+        "workflow_deployment",
+        "workflow_deployment.id",
+        "instance.deployment_id",
+      )
+      .innerJoin(
         "workflow_version",
         "workflow_version.id",
-        "instance.workflow_version_id",
+        "workflow_deployment.workflow_version_id",
       )
       .innerJoin("workflow", "workflow.id", "workflow_version.workflow_id")
       .select((eb) => [
@@ -76,7 +81,7 @@ export const taskRepository = {
         ...columnMapper.prefixedColumns(eb, "node", nodeColumns),
         ...columnMapper.prefixedColumns(eb, "instance", instanceColumns),
       ])
-      .where("workflow.environment_id", "in", environmentIds)
+      .where("workflow_deployment.environment_id", "in", environmentIds)
       .where("task.id", "=", taskId)
       .executeTakeFirst();
 

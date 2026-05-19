@@ -113,6 +113,16 @@ export const taskExecutionRepository = {
 
       const instance = await conn
         .selectFrom("instance")
+        .innerJoin(
+          "workflow_deployment",
+          "workflow_deployment.id",
+          "instance.deployment_id",
+        )
+        .innerJoin(
+          "workflow_version",
+          "workflow_version.id",
+          "workflow_deployment.workflow_version_id",
+        )
         .select(["workflow_version_id"])
         .where("id", "=", instanceId)
         .where("is_deleted", "=", false)
