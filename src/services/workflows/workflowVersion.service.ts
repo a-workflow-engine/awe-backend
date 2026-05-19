@@ -193,11 +193,11 @@ export const workflowVersionService = {
         data.versionId,
         selectedEnvironment.id,
       );
-
+    console.log(models?.workflowVersion.major_version);
     if (
       !models ||
       models.workflowVersion.status !== WorkflowVersionStatuses.PUBLISHED ||
-      !models.workflowVersion.major_version
+      typeof models.workflowVersion.major_version !== "number"
     ) {
       throw new NotFoundError("Workflow Version");
     }
@@ -242,14 +242,13 @@ export const workflowVersionService = {
     if (
       !models ||
       models.workflowVersion.status !== WorkflowVersionStatuses.PUBLISHED ||
-      !models.workflowVersion.major_version
+      typeof models.workflowVersion.major_version !== "number"
     ) {
       throw new NotFoundError("Workflow Version");
     }
 
     const { workflowVersion, deployment, activeDeployment } = models;
 
-    console.log(activeDeployment);
     if (!activeDeployment) {
       throw new StateTransitionError("Workflow version is not active");
     }

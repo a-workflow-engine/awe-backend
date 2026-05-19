@@ -128,6 +128,15 @@ export const workflowService = {
   ) => {
     const environmentIds = environmentUtils.getEnvironmentIds(environments);
 
+    const workflow = await workflowRepository.findByIdAndOrganizationIdInDetail(
+      workflowId,
+      organization.id,
+    );
+
+    if (!workflow) {
+      throw new NotFoundError("Workflow");
+    }
+
     const activeVersionExists =
       await workflowActiveDeploymentRepository.existsByWorkflowIdAndEnvironmentIds(
         workflowId,
@@ -147,7 +156,7 @@ export const workflowService = {
     };
 
     await openTransaction(async (transaction) => {
-      const [updatedWorkflow] = await Promise.all([
+      await Promise.all([
         workflowRepository.updateByIdAndOrganizationId(
           workflowId,
           organization.id,
@@ -160,10 +169,6 @@ export const workflowService = {
           transaction,
         ),
       ]);
-
-      if (!updatedWorkflow) {
-        throw new NotFoundError("Workflow");
-      }
     });
   },
 };
